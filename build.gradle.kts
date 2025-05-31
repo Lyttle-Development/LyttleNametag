@@ -37,7 +37,7 @@ dependencies {
 
 group = "com.lyttledev"
 version = (property("pluginVersion") as String)
-description = "LyttleEssentials"
+description = "LyttleNametag"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
 tasks.named<ShadowJar>("shadowJar") {
@@ -168,7 +168,7 @@ hangarPublish {
         version.set(versionString)
         channel.set(envChannel)
         changelog.set(changelogContent)
-        id.set("LyttleEssentials")
+        id.set("LyttleNametag")
         apiKey.set(System.getenv("HANGAR_API_TOKEN"))
         platforms {
             register(Platforms.PAPER) {
