@@ -14,6 +14,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Transformation;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,6 +71,18 @@ public class onPlayerMoveListener implements Listener {
         TextDisplay display = world.spawn(baseLoc, TextDisplay.class, entity -> {
             entity.text(configMessage);
             entity.setBillboard(Display.Billboard.CENTER);
+
+            // Positive Y‐offset to push this line ABOVE the root
+            float yTranslate = (float) 0.25;
+
+            entity.setTransformation(
+                new Transformation(
+                    new Vector3f(0f, yTranslate, 0f),       // translation UP by spacer
+                    new Quaternionf(0f, 0f, 0f, 1f),  // no rotation
+                    new Vector3f(1f, 1f, 1f),            // uniform scale
+                    new Quaternionf(0f, 0f, 0f, 1f)   // pivot-rotation (identity)
+                )
+            );
         });
 
         // 6) Mount the display onto the player so it follows them
