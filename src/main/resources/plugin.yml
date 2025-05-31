@@ -8,6 +8,9 @@ authors:
   - ThatsATim
   - Stualyttle
 
+softdepend:
+  - PlaceholderAPI
+
 commands:
   lyttlenametag:
     description: Admin command, mainly reload the config without the rest of the server
