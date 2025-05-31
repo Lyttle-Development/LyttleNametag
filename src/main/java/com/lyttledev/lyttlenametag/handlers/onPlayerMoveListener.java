@@ -2,7 +2,6 @@ package com.lyttledev.lyttlenametag.handlers;
 
 import com.lyttledev.lyttlenametag.LyttleNametag;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -15,24 +14,28 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Transformation;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.*;
 
 public class onPlayerMoveListener implements Listener {
     private final LyttleNametag plugin;
     private final Map<UUID, List<TextDisplay>> playerTextDisplays = new HashMap<>();
+    private final MiniMessage mini = MiniMessage.miniMessage();
 
     public onPlayerMoveListener(LyttleNametag plugin) {
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
 
-        // Periodic cleanup task: remove any orphaned TextDisplays (e.g., due to crashes or reloads)
+        // Periodic cleanup task for orphaned TextDisplays
         new BukkitRunnable() {
             @Override
             public void run() {
                 cleanupOrphans();
             }
-        }.runTaskTimer(plugin, 20 * 60, 20 * 60); // first run after 60s, then every 60s
+        }.runTaskTimer(plugin, 20 * 60, 20 * 60); // first run at 60s, then every 60s
     }
 
     @EventHandler
@@ -46,58 +49,63 @@ public class onPlayerMoveListener implements Listener {
     }
 
     private void spawnNametag(Player player) {
-        // Base location: spawn point for the root TextDisplay (adjust Y as needed)
+        // 1) Compute a base location above the player's head
         Location baseLoc = player.getLocation().clone().add(0, 2.5, 0);
         World world = baseLoc.getWorld();
 
-        // Define multi-line nametag content (use MiniMessage syntax for colors)
-        List<String> lines = Arrays.asList(
+        // 2) Define your colored lines using MiniMessage syntax
+        List<String> lines = Arrays.asList( // TODO: make this configurable
             "<gold>OWNER</gold>",
             "<aqua>STUALYTTLE</aqua>",
             "<green>QUITE OP?</green>",
             "<red>NOICE!</red>"
         );
 
+        // 3) Spacer between each line (in blocks)
+        double spacer = 0.1;  // <— adjust this to increase/decrease vertical gap
+
         List<TextDisplay> displays = new ArrayList<>();
 
-        // 1) Spawn a “root” TextDisplay that will carry all the others as passengers
+        // 4) Spawn the root TextDisplay (no visible text itself)
         TextDisplay root = world.spawn(baseLoc, TextDisplay.class, entity -> {
-            // Example “default” text—won’t actually be seen once we stack the real lines below
-            entity.text(Component.text("", NamedTextColor.WHITE));
+            entity.text(Component.text(""));
             entity.setBillboard(Display.Billboard.CENTER);
-            // Optionally tweak other properties on the root if desired (e.g., line width, shadow)
         });
         displays.add(root);
 
-        // 2) Spawn each colored line underneath the root and mount it as a passenger
-        TextDisplay previous = root;
-        // Increase this value if they still end up overlapping. 0.3–0.4 is usually enough in TextDisplay units.
-        double yOffsetPerLine = 0.3;
-
+        // 5) For each line, spawn at exactly the same 'baseLoc',
+        //    then immediately apply a positive Y‐translation so it sits ABOVE the root.
         for (int i = 0; i < lines.size(); i++) {
             String rawMiniMsg = lines.get(i);
 
-            // Compute a Y offset for this line relative to the root’s spawn point
-            Location lineLoc = baseLoc.clone().add(0, -yOffsetPerLine * (i + 1), 0);
-
-            TextDisplay lineDisplay = world.spawn(lineLoc, TextDisplay.class, entity -> {
-                // Parse the MiniMessage string to get a colored Component
-                Component parsed = MiniMessage.miniMessage().deserialize(rawMiniMsg);
+            int finalI = i;
+            TextDisplay lineDisplay = world.spawn(baseLoc, TextDisplay.class, entity -> {
+                Component parsed = mini.deserialize(rawMiniMsg);
                 entity.text(parsed);
                 entity.setBillboard(Display.Billboard.CENTER);
-                // You can also adjust entity.lineWidth(), entity.shadow(), etc., here if needed
+
+                // Positive Y‐offset to push this line ABOVE the root
+                float yTranslate = (float) (spacer * (finalI + 1));
+
+                entity.setTransformation(
+                    new Transformation(
+                        new Vector3f(0f, yTranslate, 0f),    // translation UP by spacer*(i+1)
+                        new Quaternionf(0f, 0f, 0f, 1f),     // no rotation
+                        new Vector3f(1f, 1f, 1f),            // uniform scale
+                        new Quaternionf(0f, 0f, 0f, 1f)      // pivot-rotation (identity)
+                    )
+                );
             });
 
-            // Mount this line under the previous one (stacking)
-            previous.addPassenger(lineDisplay);
+            // Mount each line directly onto the root
+            root.addPassenger(lineDisplay);
             displays.add(lineDisplay);
-            previous = lineDisplay;
         }
 
-        // 3) Finally, mount the root TextDisplay onto the player so it follows them perfectly
+        // 6) Finally, mount the root onto the player so all lines follow him
         player.addPassenger(root);
 
-        // Store references so we can remove them later on quit or cleanup
+        // 7) Store references so we can remove on quit/cleanup
         playerTextDisplays.put(player.getUniqueId(), displays);
     }
 
@@ -113,10 +121,6 @@ public class onPlayerMoveListener implements Listener {
         }
     }
 
-    /**
-     * Remove any orphaned TextDisplays for players who are no longer online.
-     * (Useful if the server crashed or the plugin was reloaded.)
-     */
     private void cleanupOrphans() {
         for (UUID uuid : new ArrayList<>(playerTextDisplays.keySet())) {
             Player player = Bukkit.getPlayer(uuid);
@@ -133,9 +137,6 @@ public class onPlayerMoveListener implements Listener {
         }
     }
 
-    /**
-     * Call this from your plugin’s onDisable() to clean up everything on shutdown.
-     */
     public void removeAllNametagsOnShutdown() {
         for (List<TextDisplay> stands : playerTextDisplays.values()) {
             for (TextDisplay stand : stands) {
