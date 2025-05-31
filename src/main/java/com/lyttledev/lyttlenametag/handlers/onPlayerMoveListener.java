@@ -105,7 +105,12 @@ public class onPlayerMoveListener implements Listener {
         // 6) Finally, mount the root onto the player so all lines follow him
         player.addPassenger(root);
 
-        // 7) Store references so we can remove on quit/cleanup
+        // 7) Hide every TextDisplay from the player who owns them
+        for (TextDisplay td : displays) {
+            player.hideEntity(plugin, td);
+        }
+
+        // 8) Store references so we can remove on quit/cleanup
         playerTextDisplays.put(player.getUniqueId(), displays);
     }
 
@@ -115,6 +120,8 @@ public class onPlayerMoveListener implements Listener {
         if (stands != null) {
             for (TextDisplay stand : stands) {
                 if (!stand.isDead()) {
+                    // In case the player never quit cleanly, un-hide and then remove
+                    player.showEntity(plugin, stand);
                     stand.remove();
                 }
             }
@@ -138,9 +145,15 @@ public class onPlayerMoveListener implements Listener {
     }
 
     public void removeAllNametagsOnShutdown() {
-        for (List<TextDisplay> stands : playerTextDisplays.values()) {
-            for (TextDisplay stand : stands) {
+        for (Map.Entry<UUID, List<TextDisplay>> entry : playerTextDisplays.entrySet()) {
+            UUID uuid = entry.getKey();
+            Player player = Bukkit.getPlayer(uuid);
+            for (TextDisplay stand : entry.getValue()) {
                 if (!stand.isDead()) {
+                    // If the player is still online, un-hide first (just in case)
+                    if (player != null && player.isOnline()) {
+                        player.showEntity(plugin, stand);
+                    }
                     stand.remove();
                 }
             }
