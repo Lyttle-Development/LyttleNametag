@@ -1,0 +1,14 @@
+name: LyttleNametag
+description: Custom nametags plugin
+version: '${projectVersion}'
+main: com.lyttledev.lyttlenametag.LyttleNametag
+api-version: '1.21'
+authors:
+  - LyttleDevelopment
+  - ThatsATim
+  - Stualyttle
+
+commands:
+  lyttlenametag:
+    description: Admin command, mainly reload the config without the rest of the server
+    permission: lyttlenametag.lyttlenametag
