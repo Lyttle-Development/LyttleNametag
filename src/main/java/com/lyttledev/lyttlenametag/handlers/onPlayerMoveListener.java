@@ -19,12 +19,12 @@ import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.io.Console;
 import java.util.*;
 
 public class onPlayerMoveListener implements Listener {
     private final LyttleNametag plugin;
-    private final Map<UUID, List<TextDisplay>> playerTextDisplays = new HashMap<>();
-    private final MiniMessage mini = MiniMessage.miniMessage();
+    private final Map<UUID, TextDisplay> playerTextDisplays = new HashMap<>();
 
     public onPlayerMoveListener(LyttleNametag plugin) {
         this.plugin = plugin;
@@ -65,62 +65,21 @@ public class onPlayerMoveListener implements Listener {
 
         // Split the nametag text into lines based on newline characters
         Component configMessage = plugin.message.getMessage("nametag", replacements, player);
-        String[] rawLines = mini.serialize(configMessage).split("\\n");
-        List<String> lines = rawLines.length > 0
-            ? Arrays.asList(rawLines).reversed()
-            : Collections.singletonList("No text provided");
-
-        // 3) Spacer between each line (in blocks)
-        double spacer = 0.25;  // <— adjust this to increase/decrease a vertical gap
-
-        List<TextDisplay> displays = new ArrayList<>();
 
         // 4) Spawn the root TextDisplay (no visible text itself)
         TextDisplay root = world.spawn(baseLoc, TextDisplay.class, entity -> {
-            entity.text(Component.text(""));
+            entity.text(configMessage);
             entity.setBillboard(Display.Billboard.CENTER);
         });
-        displays.add(root);
-
-        // 5) For each line, spawn at exactly the same 'baseLoc',
-        //    then immediately apply a positive Y‐translation so it sits ABOVE the root.
-        for (int i = 0; i < lines.size(); i++) {
-            String rawMiniMsg = lines.get(i);
-
-            int finalI = i;
-            TextDisplay lineDisplay = world.spawn(baseLoc, TextDisplay.class, entity -> {
-                Component parsed = mini.deserialize(rawMiniMsg);
-                entity.text(parsed);
-                entity.setBillboard(Display.Billboard.CENTER);
-
-                // Positive Y‐offset to push this line ABOVE the root
-                float yTranslate = (float) (spacer * (finalI + 1));
-
-                entity.setTransformation(
-                    new Transformation(
-                        new Vector3f(0f, yTranslate, 0f),    // translation UP by spacer*(i+1)
-                        new Quaternionf(0f, 0f, 0f, 1f),     // no rotation
-                        new Vector3f(1f, 1f, 1f),            // uniform scale
-                        new Quaternionf(0f, 0f, 0f, 1f)      // pivot-rotation (identity)
-                    )
-                );
-            });
-
-            // Mount each line directly onto the root
-            root.addPassenger(lineDisplay);
-            displays.add(lineDisplay);
-        }
 
         // 6) Finally, mount the root onto the player so all lines follow him
         player.addPassenger(root);
 
         // 7) Hide every TextDisplay from the player who owns them
-        for (TextDisplay td : displays) {
-            player.hideEntity(plugin, td);
-        }
+        player.hideEntity(plugin, root);
 
         // 8) Store references so we can remove on quit/cleanup
-        playerTextDisplays.put(player.getUniqueId(), displays);
+        playerTextDisplays.put(player.getUniqueId(), root);
     }
 
     private void removeNametag(Player player) {
