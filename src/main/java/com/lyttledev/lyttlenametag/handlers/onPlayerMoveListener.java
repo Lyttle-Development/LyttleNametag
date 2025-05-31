@@ -3,7 +3,6 @@ package com.lyttledev.lyttlenametag.handlers;
 import com.lyttledev.lyttlenametag.LyttleNametag;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -15,12 +14,11 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Transformation;
-import org.joml.Quaternionf;
-import org.joml.Vector3f;
 
-import java.io.Console;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class onPlayerMoveListener implements Listener {
     private final LyttleNametag plugin;
@@ -63,67 +61,61 @@ public class onPlayerMoveListener implements Listener {
             .add("<Z>", String.valueOf(player.getLocation().getBlockZ()))
             .build();
 
-        // Split the nametag text into lines based on newline characters
+        // Build the Component from your plugin's configuration
         Component configMessage = plugin.message.getMessage("nametag", replacements, player);
 
-        // 4) Spawn the root TextDisplay (no visible text itself)
-        TextDisplay root = world.spawn(baseLoc, TextDisplay.class, entity -> {
+        // 4) Spawn a single TextDisplay
+        TextDisplay display = world.spawn(baseLoc, TextDisplay.class, entity -> {
             entity.text(configMessage);
             entity.setBillboard(Display.Billboard.CENTER);
         });
 
-        // 6) Finally, mount the root onto the player so all lines follow him
-        player.addPassenger(root);
+        // 6) Mount the display onto the player so it follows them
+        player.addPassenger(display);
 
-        // 7) Hide every TextDisplay from the player who owns them
-        player.hideEntity(plugin, root);
+        // 7) Hide this display from the player who owns it
+        player.hideEntity(plugin, display);
 
-        // 8) Store references so we can remove on quit/cleanup
-        playerTextDisplays.put(player.getUniqueId(), root);
+        // 8) Store the reference so we can remove it later
+        playerTextDisplays.put(player.getUniqueId(), display);
     }
 
     private void removeNametag(Player player) {
         UUID uuid = player.getUniqueId();
-        List<TextDisplay> stands = playerTextDisplays.remove(uuid);
-        if (stands != null) {
-            for (TextDisplay stand : stands) {
-                if (!stand.isDead()) {
-                    // In case the player never quit cleanly, un-hide and then remove
-                    player.showEntity(plugin, stand);
-                    stand.remove();
-                }
-            }
+        TextDisplay display = playerTextDisplays.remove(uuid);
+
+        if (display != null && !display.isDead()) {
+            // If for some reason the player never quit cleanly, un-hide then remove
+            player.showEntity(plugin, display);
+            display.remove();
         }
     }
 
     private void cleanupOrphans() {
+        // Iterate over a copy of the keySet to avoid ConcurrentModificationException
         for (UUID uuid : new ArrayList<>(playerTextDisplays.keySet())) {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null || !player.isOnline()) {
-                List<TextDisplay> orphanStands = playerTextDisplays.remove(uuid);
-                if (orphanStands != null) {
-                    for (TextDisplay stand : orphanStands) {
-                        if (!stand.isDead()) {
-                            stand.remove();
-                        }
-                    }
+                TextDisplay orphan = playerTextDisplays.remove(uuid);
+                if (orphan != null && !orphan.isDead()) {
+                    orphan.remove();
                 }
             }
         }
     }
 
     public void removeAllNametagsOnShutdown() {
-        for (Map.Entry<UUID, List<TextDisplay>> entry : playerTextDisplays.entrySet()) {
+        for (Map.Entry<UUID, TextDisplay> entry : playerTextDisplays.entrySet()) {
             UUID uuid = entry.getKey();
             Player player = Bukkit.getPlayer(uuid);
-            for (TextDisplay stand : entry.getValue()) {
-                if (!stand.isDead()) {
-                    // If the player is still online, un-hide first (just in case)
-                    if (player != null && player.isOnline()) {
-                        player.showEntity(plugin, stand);
-                    }
-                    stand.remove();
+            TextDisplay display = entry.getValue();
+
+            if (display != null && !display.isDead()) {
+                // If the player is still online, un-hide first (just in case)
+                if (player != null && player.isOnline()) {
+                    player.showEntity(plugin, display);
                 }
+                display.remove();
             }
         }
         playerTextDisplays.clear();
