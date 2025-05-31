@@ -1,7 +1,7 @@
 package com.lyttledev.lyttlenametag.handlers;
 
 import com.lyttledev.lyttlenametag.LyttleNametag;
-import com.lyttledev.lyttleutils.utils.communication.Message;
+import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
@@ -54,23 +54,24 @@ public class onPlayerMoveListener implements Listener {
         Location baseLoc = player.getLocation().clone().add(0, 2.5, 0);
         World world = baseLoc.getWorld();
 
-        String[][] replacements = {
-            {"<PLAYER>", player.getName()},
-            {"<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName()},
-            {"<WORLD>", world.getName()},
-            {"<X>", String.valueOf(player.getLocation().getBlockX())},
-            {"<Y>", String.valueOf(player.getLocation().getBlockY())},
-            {"<Z>", String.valueOf(player.getLocation().getBlockZ())}
-        };
+        Replacements replacements = Replacements.builder()
+            .add("<PLAYER>", player.getName())
+            .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
+            .add("<WORLD>", world.getName())
+            .add("<X>", String.valueOf(player.getLocation().getBlockX()))
+            .add("<Y>", String.valueOf(player.getLocation().getBlockY()))
+            .add("<Z>", String.valueOf(player.getLocation().getBlockZ()))
+            .build();
 
         // Split the nametag text into lines based on newline characters
-        String[] rawLines = mini.serialize(plugin.message.getMessage("nametag", replacements)).split("\\n");
+        Component configMessage = plugin.message.getMessage("nametag", replacements, player);
+        String[] rawLines = mini.serialize(configMessage).split("\\n");
         List<String> lines = rawLines.length > 0
             ? Arrays.asList(rawLines).reversed()
             : Collections.singletonList("No text provided");
 
         // 3) Spacer between each line (in blocks)
-        double spacer = 0.25;  // <— adjust this to increase/decrease vertical gap
+        double spacer = 0.25;  // <— adjust this to increase/decrease a vertical gap
 
         List<TextDisplay> displays = new ArrayList<>();
 
