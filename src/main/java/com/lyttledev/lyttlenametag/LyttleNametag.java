@@ -14,6 +14,8 @@ public final class LyttleNametag extends JavaPlugin {
     public Configs config;
     public Console console;
     public Message message;
+    public onPlayerMoveListener playerMove;
+
 
     @Override
     public void onEnable() {
@@ -31,7 +33,12 @@ public final class LyttleNametag extends JavaPlugin {
         new LyttleNametagCommand(this);
 
         // Handlers
-        new onPlayerMoveListener(this);
+        this.playerMove = new onPlayerMoveListener(this);
+    }
+
+    @Override
+    public void onDisable() {
+        this.playerMove.removeAllNametagsOnShutdown();
     }
 
     @Override
