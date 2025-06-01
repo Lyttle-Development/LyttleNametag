@@ -35,7 +35,6 @@ public class LyttleNametagCommand implements CommandExecutor, TabCompleter {
                 plugin.config.reload();
                 plugin.message.sendMessageRaw(sender, Component.text("The config has been reloaded"));
                 plugin.playerMove.reloadNametags();
-                PlaceholderAPI.getRegisteredIdentifiers();
             }
         }
         return true;
