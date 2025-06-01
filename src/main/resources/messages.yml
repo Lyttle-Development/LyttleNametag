@@ -23,5 +23,7 @@ message_not_found: <red>Oh... I can't react to that. (Contact the Administrators
 
 # nametag
 nametag: |-
-  <gray>%luckperms_prefix%</gray>
-  <gray><PLAYER></gray>
+  <gray>%luckperms_prefix%
+  <PLAYER></gray>
+  <dark_gray>@</dark_gray>
+  <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold>
