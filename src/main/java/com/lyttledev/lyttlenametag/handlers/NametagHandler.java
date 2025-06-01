@@ -23,11 +23,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class onPlayerMoveListener implements Listener {
+public class NametagHandler implements Listener {
     private final LyttleNametag plugin;
     private final Map<UUID, TextDisplay> playerTextDisplays = new HashMap<>();
 
-    public onPlayerMoveListener(LyttleNametag plugin) {
+    public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
 

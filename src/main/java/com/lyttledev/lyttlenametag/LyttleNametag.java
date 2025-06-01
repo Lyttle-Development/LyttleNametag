@@ -1,7 +1,7 @@
 package com.lyttledev.lyttlenametag;
 
 import com.lyttledev.lyttlenametag.commands.*;
-import com.lyttledev.lyttlenametag.handlers.onPlayerMoveListener;
+import com.lyttledev.lyttlenametag.handlers.NametagHandler;
 import com.lyttledev.lyttlenametag.types.Configs;
 
 import com.lyttledev.lyttleutils.utils.communication.Console;
@@ -16,7 +16,7 @@ public final class LyttleNametag extends JavaPlugin {
     public Console console;
     public Message message;
     public GlobalConfig global;
-    public onPlayerMoveListener playerMove;
+    public NametagHandler playerMove;
 
 
     @Override
@@ -36,7 +36,7 @@ public final class LyttleNametag extends JavaPlugin {
         new LyttleNametagCommand(this);
 
         // Handlers
-        this.playerMove = new onPlayerMoveListener(this);
+        this.playerMove = new NametagHandler(this);
     }
 
     @Override
