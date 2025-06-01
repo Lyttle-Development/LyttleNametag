@@ -6,6 +6,7 @@ import com.lyttledev.lyttlenametag.types.Configs;
 
 import com.lyttledev.lyttleutils.utils.communication.Console;
 import com.lyttledev.lyttleutils.utils.communication.Message;
+import com.lyttledev.lyttleutils.utils.storage.GlobalConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -14,6 +15,7 @@ public final class LyttleNametag extends JavaPlugin {
     public Configs config;
     public Console console;
     public Message message;
+    public GlobalConfig global;
     public onPlayerMoveListener playerMove;
 
 
@@ -21,13 +23,14 @@ public final class LyttleNametag extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         // Setup config after creating the configs
-        config = new Configs(this);
+        this.config = new Configs(this);
+        this.global = new GlobalConfig(this);
         // Migrate config
         migrateConfig();
 
         // Plugin startup logic
         this.console = new Console(this);
-        this.message = new Message(this, config.messages);
+        this.message = new Message(this, config.messages, global);
 
         // Commands
         new LyttleNametagCommand(this);
