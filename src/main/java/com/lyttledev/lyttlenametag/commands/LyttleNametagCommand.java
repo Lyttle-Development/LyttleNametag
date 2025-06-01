@@ -1,7 +1,6 @@
 package com.lyttledev.lyttlenametag.commands;
 
 import com.lyttledev.lyttlenametag.LyttleNametag;
-import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -34,7 +33,7 @@ public class LyttleNametagCommand implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("reload")) {
                 plugin.config.reload();
                 plugin.message.sendMessageRaw(sender, Component.text("The config has been reloaded"));
-                plugin.playerMove.reloadNametags();
+                plugin.nametagHandler.reloadNametags();
             }
         }
         return true;
