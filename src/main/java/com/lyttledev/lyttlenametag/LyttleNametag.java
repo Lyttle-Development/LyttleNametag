@@ -18,7 +18,6 @@ public final class LyttleNametag extends JavaPlugin {
     public GlobalConfig global;
     public NametagHandler playerMove;
 
-
     @Override
     public void onEnable() {
         saveDefaultConfig();

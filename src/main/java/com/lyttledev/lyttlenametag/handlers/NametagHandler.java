@@ -52,7 +52,7 @@ public class NametagHandler implements Listener {
     }
 
     private void spawnNametag(Player player) {
-        // 1) Compute a base location above the player's head
+        // Compute a base location above the player's head
         Location baseLoc = player.getLocation().clone().add(0, 2.5, 0);
         World world = baseLoc.getWorld();
 
@@ -68,7 +68,7 @@ public class NametagHandler implements Listener {
         // Build the Component from your plugin's configuration
         Component configMessage = plugin.message.getMessage("nametag", replacements, player);
 
-        // 4) Spawn a single TextDisplay
+        // Spawn a single TextDisplay
         TextDisplay display = world.spawn(baseLoc, TextDisplay.class, entity -> {
             entity.text(configMessage);
             entity.setBillboard(Display.Billboard.CENTER);
@@ -86,13 +86,13 @@ public class NametagHandler implements Listener {
             );
         });
 
-        // 6) Mount the display onto the player so it follows them
+        // Mount the display onto the player so it follows them
         player.addPassenger(display);
 
-        // 7) Hide this display from the player who owns it
+        // Hide this display from the player who owns it
         player.hideEntity(plugin, display);
 
-        // 8) Store the reference so we can remove it later
+        // Store the reference so we can remove it later
         playerTextDisplays.put(player.getUniqueId(), display);
     }
 
@@ -138,7 +138,7 @@ public class NametagHandler implements Listener {
     }
 
     public void reloadNametags() {
-        // 1) Remove every existing TextDisplay
+        // Remove every existing TextDisplay
         for (Map.Entry<UUID, TextDisplay> entry : playerTextDisplays.entrySet()) {
             UUID uuid = entry.getKey();
             TextDisplay display = entry.getValue();
@@ -152,10 +152,10 @@ public class NametagHandler implements Listener {
                 display.remove();
             }
         }
-        // 2) Clear the map so we can re‐spawn fresh ones
+        // Clear the map so we can re‐spawn fresh ones
         playerTextDisplays.clear();
 
-        // 3) Spawn a new hologram for each player currently online
+        // Spawn a new hologram for each player currently online
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             spawnNametag(onlinePlayer);
         }
