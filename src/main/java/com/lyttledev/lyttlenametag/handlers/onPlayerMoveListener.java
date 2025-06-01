@@ -36,6 +36,7 @@ public class onPlayerMoveListener implements Listener {
             @Override
             public void run() {
                 cleanupOrphans();
+                reloadNametags();
             }
         }.runTaskTimer(plugin, 20 * 60, 20 * 60); // first run at 60s, then every 60s
     }
@@ -80,7 +81,7 @@ public class onPlayerMoveListener implements Listener {
                     new Vector3f(0f, yTranslate, 0f),       // translation UP by spacer
                     new Quaternionf(0f, 0f, 0f, 1f),  // no rotation
                     new Vector3f(1f, 1f, 1f),            // uniform scale
-                    new Quaternionf(0f, 0f, 0f, 1f)   // pivot-rotation (identity)
+                    new Quaternionf(0f, 0f, 0f, 1f)   // pivot‐rotation (identity)
                 )
             );
         });
@@ -100,7 +101,7 @@ public class onPlayerMoveListener implements Listener {
         TextDisplay display = playerTextDisplays.remove(uuid);
 
         if (display != null && !display.isDead()) {
-            // If for some reason the player never quit cleanly, un-hide then remove
+            // If for some reason the player never quit cleanly, un‐hide then remove
             player.showEntity(plugin, display);
             display.remove();
         }
@@ -126,7 +127,7 @@ public class onPlayerMoveListener implements Listener {
             TextDisplay display = entry.getValue();
 
             if (display != null && !display.isDead()) {
-                // If the player is still online, un-hide first (just in case)
+                // If the player is still online, un‐hide first (just in case)
                 if (player != null && player.isOnline()) {
                     player.showEntity(plugin, display);
                 }
@@ -134,5 +135,29 @@ public class onPlayerMoveListener implements Listener {
             }
         }
         playerTextDisplays.clear();
+    }
+
+    public void reloadNametags() {
+        // 1) Remove every existing TextDisplay
+        for (Map.Entry<UUID, TextDisplay> entry : playerTextDisplays.entrySet()) {
+            UUID uuid = entry.getKey();
+            TextDisplay display = entry.getValue();
+            Player player = Bukkit.getPlayer(uuid);
+
+            if (display != null && !display.isDead()) {
+                // If the player is still online, un‐hide first so it can be safely removed
+                if (player != null && player.isOnline()) {
+                    player.showEntity(plugin, display);
+                }
+                display.remove();
+            }
+        }
+        // 2) Clear the map so we can re‐spawn fresh ones
+        playerTextDisplays.clear();
+
+        // 3) Spawn a new hologram for each player currently online
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            spawnNametag(onlinePlayer);
+        }
     }
 }
