@@ -35,14 +35,6 @@
 
 ---
 
-### 🤌 Lyttle Certified
-- Basic plugin without fluff
-- No unnecessary features
-- Full flexibility and configurability
-- Open source and free to use (MIT License)
-
----
-
 ## ⌨️ Commands
 
 > 💡 `<required>` `[optional]`
