@@ -13,12 +13,14 @@ plugins {
 
 repositories {
     mavenLocal()
-    maven { url = uri("https://repo.papermc.io/repository/maven-public/") }
+    maven { url = uri("https://repo.papermc.io/repository/maven-public/") } // PaperMC
     maven { url = uri("https://oss.sonatype.org/content/groups/public/") }
     maven { url = uri("https://jitpack.io") }
     maven { url = uri("https://repo.maven.apache.org/maven2/") }
-    maven { url = uri("https://repo.extendedclip.com/releases/") }
-    maven {
+    maven { url = uri("https://repo.extendedclip.com/releases/") } // For PlaceholderAPI
+    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") } // For packetevents
+    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") } // For packetevents
+    maven { // LyttleUtils GitHub Packages
         name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/Lyttle-Development/LyttleUtils")
         credentials {
@@ -32,6 +34,7 @@ repositories {
 dependencies {
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.8.0")
     implementation("com.lyttledev:lyttleutils:1.1.1")
 }
 

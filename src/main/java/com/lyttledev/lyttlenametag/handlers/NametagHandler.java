@@ -1,6 +1,7 @@
 package com.lyttledev.lyttlenametag.handlers;
 
 import com.lyttledev.lyttlenametag.LyttleNametag;
+import com.lyttledev.lyttlenametag.utils.FakeMountHandler;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -19,6 +20,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -26,14 +29,14 @@ import java.util.stream.Collectors;
 public class NametagHandler implements Listener {
     private final LyttleNametag plugin;
     private final Map<UUID, List<TextDisplay>> playerTextDisplays = new HashMap<>();
+    private final FakeMountHandler fakeMountHandler;
 
-    // Vertical spacing between lines
     private static final float LINE_HEIGHT = 0.25f;
-    // Offset above head
     private static final float BASE_Y_OFFSET = 2.5f;
 
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
+        this.fakeMountHandler = new FakeMountHandler(plugin);
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
 
         // Periodic cleanup and reload
@@ -44,127 +47,128 @@ public class NametagHandler implements Listener {
                 reloadNametags();
             }
         }.runTaskTimer(plugin, 20 * 60, 20 * 60);
+
+        // Keep displays following and remounting
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    List<TextDisplay> displays = playerTextDisplays.get(p.getUniqueId());
+                    if (displays == null) continue;
+                    Location base = p.getLocation().add(0, BASE_Y_OFFSET, 0);
+                    for (int i = 0; i < displays.size(); i++) {
+                        TextDisplay disp = displays.get(i);
+                        if (disp.isDead()) continue;
+                        float yOff = LINE_HEIGHT * (i + 1);
+                        disp.teleport(base.clone().add(0, yOff, 0));
+                        // resend mount packet to each viewer
+                        for (Player viewer : Bukkit.getOnlinePlayers()) {
+                            fakeMountHandler.sendFakeMount(viewer, displays);
+                        }
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
     }
 
     @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        spawnNametag(event.getPlayer());
+    public void onPlayerJoin(PlayerJoinEvent e) {
+        spawnNametag(e.getPlayer());
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        removeNametag(event.getPlayer());
+    public void onPlayerQuit(PlayerQuitEvent e) {
+        removeNametag(e.getPlayer());
     }
 
     @EventHandler
-    public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
-        Player sneaking = event.getPlayer();
+    public void onPlayerToggleSneak(PlayerToggleSneakEvent e) {
+        Player sneaking = e.getPlayer();
         List<TextDisplay> displays = playerTextDisplays.getOrDefault(sneaking.getUniqueId(), Collections.emptyList());
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            for (TextDisplay display : displays) {
-                if (sneaking.equals(viewer)) {
-                    continue;
-                }
-                if (event.isSneaking()) {
-                    viewer.hideEntity(plugin, display);
-                } else {
-                    viewer.showEntity(plugin, display);
-                }
+            for (TextDisplay disp : displays) {
+                if (sneaking.equals(viewer)) continue;
+                if (e.isSneaking()) viewer.hideEntity(plugin, disp);
+                else viewer.showEntity(plugin, disp);
             }
         }
     }
 
     private void spawnNametag(Player player) {
         removeNametag(player);
-
         Location baseLoc = player.getLocation().clone().add(0, BASE_Y_OFFSET, 0);
         World world = baseLoc.getWorld();
 
-        Replacements replacements = Replacements.builder()
+        Replacements repl = Replacements.builder()
             .add("<PLAYER>", player.getName())
-            .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
+            .add("<DISPLAYNAME>", player.displayName().toString())
             .add("<WORLD>", world.getName())
             .add("<X>", String.valueOf(player.getLocation().getBlockX()))
             .add("<Y>", String.valueOf(player.getLocation().getBlockY()))
             .add("<Z>", String.valueOf(player.getLocation().getBlockZ()))
             .build();
 
-        Component configMessage = plugin.message.getMessage("nametag", replacements, player);
-        // Serialize to legacy text then split lines
-        String raw = LegacyComponentSerializer.legacySection().serialize(configMessage);
-        String[] lines = raw.split("\\r?\\n");
+        Component msg = plugin.message.getMessage("nametag", repl, player);
+        String[] lines = LegacyComponentSerializer.legacySection()
+                            .serialize(msg)
+                            .split("\\r?\\n");
 
         List<TextDisplay> displays = Arrays.stream(lines)
             .map(line -> {
-                final int index = Arrays.asList(lines).indexOf(line);
+                int idx = Arrays.asList(lines).indexOf(line);
                 Location loc = baseLoc.clone();
-                TextDisplay disp = world.spawn(loc, TextDisplay.class, entity -> {
-                    entity.text(LegacyComponentSerializer.legacySection().deserialize(line));
-                    entity.setBillboard(Display.Billboard.CENTER);
-                    float yOffset = (LINE_HEIGHT * index) + LINE_HEIGHT;
-                    entity.setTransformation(new Transformation(
-                        new Vector3f(0f, yOffset, 0f),
-                        new Quaternionf(0f, 0f, 0f, 1f),
-                        new Vector3f(1f, 1f, 1f),
-                        new Quaternionf(0f, 0f, 0f, 1f)
+                TextDisplay disp = world.spawn(loc, TextDisplay.class, ent -> {
+                    ent.text(LegacyComponentSerializer.legacySection().deserialize(line));
+                    ent.setBillboard(Display.Billboard.CENTER);
+                    ent.setTransformation(new Transformation(
+                        new Vector3f(0f, LINE_HEIGHT * (idx + 1), 0f),
+                        new Quaternionf(),
+                        new Vector3f(1f,1f,1f),
+                        new Quaternionf()
                     ));
                 });
                 disp.addScoreboardTag("nametag_display");
                 disp.setPersistent(false);
-                player.addPassenger(disp);
-                // Initially hide owner view so they don't see their own tag
+                playerTextDisplays.computeIfAbsent(player.getUniqueId(), u -> new ArrayList<>()).add(disp);
+                // hide self-view
                 player.hideEntity(plugin, disp);
                 return disp;
-            })
-            .collect(Collectors.toList());
+            }).collect(Collectors.toList());
 
         playerTextDisplays.put(player.getUniqueId(), displays);
+        fakeMountHandler.sendFakeMount(player, displays);
     }
 
     private void removeNametag(Player player) {
-        List<TextDisplay> displays = playerTextDisplays.remove(player.getUniqueId());
-        if (displays != null) {
-            for (TextDisplay display : displays) {
-                if (!display.isDead()) {
-                    for (Player p : Bukkit.getOnlinePlayers()) {
-                        p.showEntity(plugin, display);
-                    }
-                    display.remove();
+        List<TextDisplay> list = playerTextDisplays.remove(player.getUniqueId());
+        if (list != null) {
+            for (TextDisplay disp : list) {
+                if (!disp.isDead()) {
+                    for (Player p : Bukkit.getOnlinePlayers()) p.showEntity(plugin, disp);
+                    disp.remove();
                 }
             }
         }
     }
 
     private void cleanupOrphans() {
-        for (UUID uuid : new ArrayList<>(playerTextDisplays.keySet())) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player == null || !player.isOnline()) {
-                List<TextDisplay> displays = playerTextDisplays.remove(uuid);
-                if (displays != null) {
-                    displays.forEach(d -> { if (!d.isDead()) d.remove(); });
-                }
+        for (UUID id : new ArrayList<>(playerTextDisplays.keySet())) {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || !p.isOnline()) {
+                removeNametag(p != null ? p : Bukkit.getOfflinePlayer(id).getPlayer());
             }
         }
     }
 
     public void removeAllNametagsOnShutdown() {
-        playerTextDisplays.forEach((uuid, displays) -> {
-            Player player = Bukkit.getPlayer(uuid);
-            displays.forEach(disp -> {
-                if (!disp.isDead()) {
-                    if (player != null && player.isOnline()) player.showEntity(plugin, disp);
-                    disp.remove();
-                }
-            });
+        playerTextDisplays.keySet().forEach(id -> {
+            Player p = Bukkit.getPlayer(id);
+            removeNametag(p);
         });
-        playerTextDisplays.clear();
     }
 
     public void reloadNametags() {
-        // Remove all then respawn
         removeAllNametagsOnShutdown();
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            spawnNametag(online);
-        }
+        Bukkit.getOnlinePlayers().forEach(this::spawnNametag);
     }
 }
