@@ -1,8 +1,7 @@
+
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import io.papermc.hangarpublishplugin.model.Platforms
 import java.io.ByteArrayOutputStream
-import org.gradle.api.tasks.Delete
-import org.gradle.api.tasks.Copy
 
 plugins {
     `java-library`
@@ -18,7 +17,9 @@ repositories {
     maven { url = uri("https://oss.sonatype.org/content/groups/public/") }
     maven { url = uri("https://jitpack.io") }
     maven { url = uri("https://repo.maven.apache.org/maven2/") }
-    maven { url = uri("https://repo.extendedclip.com/releases/") } // For PlaceholderAPI
+    maven { url = uri("https://repo.extendedclip.com/releases/") } // PlaceholderAPI
+    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") } // PacketEvents
+    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") } // PacketEvents
     maven { // LyttleUtils GitHub Packages
         name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/Lyttle-Development/LyttleUtils")
@@ -32,6 +33,8 @@ repositories {
 dependencies {
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.9.4")
+    compileOnly("com.github.retrooper:packetevents-api:2.9.4")
     implementation("com.lyttledev:lyttleutils:1.1.7")
 }
 

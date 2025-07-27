@@ -8,6 +8,9 @@ authors:
   - ThatsATim
   - Stualyttle
 
+depend:
+  - packetevents
+
 softdepend:
   - PlaceholderAPI
 
