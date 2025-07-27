@@ -172,6 +172,9 @@ public class NametagHandler implements Listener {
 
                 metadata.add(new EntityData<>(3, EntityDataTypes.BOOLEAN, true)); // Custom name visible
                 metadata.add(new EntityData<>(5, EntityDataTypes.BOOLEAN, true)); // No gravity
+                // ArmorStand flags: 0x10 = marker, 0x01 = small
+                byte armorStandFlags = (byte) (0x01);
+                metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, armorStandFlags)); // Marker + small
 
                 WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                         entity.getEntityId(),
