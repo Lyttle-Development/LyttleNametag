@@ -68,15 +68,17 @@ public final class LyttleNametag extends JavaPlugin {
         }
 
         switch (config.general.get("config_version").toString()) {
-//            case "0":
-//                // Migrate config entries.
-//
-//                // Update config version.
-//                config.general.set("config_version", 1);
-//
-//                // Recheck if the config is fully migrated.
-//                migrateConfig();
-//                break;
+            case "0":
+                // Migrate config entries.
+                config.general.set("nametag", config.messages.get("nametag"));
+                config.messages.remove("nametag");
+
+                // Update config version.
+                config.general.set("config_version", 1);
+
+                // Recheck if the config is fully migrated.
+                migrateConfig();
+                break;
             default:
                 break;
         }
