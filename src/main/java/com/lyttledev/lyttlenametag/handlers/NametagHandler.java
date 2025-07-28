@@ -14,7 +14,6 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSe
 import com.lyttledev.lyttlenametag.LyttleNametag;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -90,7 +89,7 @@ public class NametagHandler implements Listener {
     private void spawnNametag(Player player) {
         removeNametag(player);
 
-        org.bukkit.Location baseLoc = player.getLocation();
+        org.bukkit.Location baseLoc = player.getLocation().clone();
         World world = baseLoc.getWorld();
 
         Replacements replacements = Replacements.builder()
@@ -102,18 +101,13 @@ public class NametagHandler implements Listener {
                 .add("<Z>", String.valueOf(player.getLocation().getBlockZ()))
                 .build();
 
-        Component configMessage = plugin.message.getMessage("nametag", replacements, player);
-        // Serialize to legacy text then split lines
-        String raw = LegacyComponentSerializer.legacySection().serialize(configMessage);
-        String[] lines = raw.split("\\r?\\n");
+        Component message = plugin.message.getMessage("nametag", replacements, player);
 
         NametagEntity nametagEntity = new NametagEntity(
                 entityIdCounter.decrementAndGet(),
                 player.getEntityId(),
-                MiniMessage.miniMessage().serialize(configMessage)
+                message
         );
-
-
 
         playerNametags.put(player.getUniqueId(), nametagEntity);
 
@@ -152,16 +146,11 @@ public class NametagHandler implements Listener {
             );
 
             List<EntityData<?>> metadata = new ArrayList<>();
-            metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, (byte) 0x20)); // Invisible
-
-            String jsonText = "{\"text\":\"" + escapeJsonString(entity.getText()) + "\"}";
-            metadata.add(new EntityData<>(2, EntityDataTypes.OPTIONAL_COMPONENT, Optional.of(jsonText)));
-
+            metadata.add(new EntityData<>(2, EntityDataTypes.OPTIONAL_ADV_COMPONENT, Optional.of(entity.getText())));
             metadata.add(new EntityData<>(3, EntityDataTypes.BOOLEAN, true)); // Custom name visible
-            metadata.add(new EntityData<>(5, EntityDataTypes.BOOLEAN, true)); // No gravity
-            // ArmorStand flags: 0x10 = marker, 0x01 = small
-            byte armorStandFlags = (byte) (0x01);
-            metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, armorStandFlags)); // Marker + small
+            // flags: 0x10 = marker, 0x01 = small
+            byte flags = (byte) (0x01);
+            metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, flags)); // Marker + small
 
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
                     entity.getEntityId(),
@@ -171,9 +160,7 @@ public class NametagHandler implements Listener {
             PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
             PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
 
-            // STEP 2
             int currentParent = owner.getEntityId();
-
             WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(
                     currentParent,
                     new int[]{entity.getEntityId()}
@@ -196,19 +183,6 @@ public class NametagHandler implements Listener {
                 PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
             }
         }
-    }
-
-    private String escapeJsonString(String input) {
-        if (input == null) {
-            return "";
-        }
-        return input.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t")
-                .replace("\b", "\\b")
-                .replace("\f", "\\f");
     }
 
     private void hideNametagFromPlayer(Player owner, Player viewer) {
@@ -251,9 +225,9 @@ public class NametagHandler implements Listener {
     private static class NametagEntity {
         private final int entityId;
         private final int parentEntityId;
-        private final String text;
+        private final Component text;
 
-        public NametagEntity(int entityId, int parentEntityId, String text) {
+        public NametagEntity(int entityId, int parentEntityId, Component text) {
             this.entityId = entityId;
             this.parentEntityId = parentEntityId;
             this.text = text;
@@ -265,7 +239,7 @@ public class NametagHandler implements Listener {
         public int getParentEntityId() {
             return parentEntityId;
         }
-        public String getText() {
+        public Component getText() {
             return text;
         }
     }
