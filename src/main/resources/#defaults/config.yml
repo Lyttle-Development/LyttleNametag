@@ -1,3 +1,19 @@
-# Used internally for configuration updates.
+# ###################################################
+#            Lyttle Nametag - config.yml            #
+# ###################################################
+# This file contains the configuration for the Lyttle Nametag plugin.
+# You can customize the nametag format and other settings.
+#
+# ⚠️ Do NOT remove any keys — the plugin depends on them.
+# You are free to customize the text and formatting.
+# ###################################################
+
+# nametag
+nametag: |-
+  <gray>%luckperms_prefix%
+  <PLAYER></gray>
+  <dark_gray>@</dark_gray>
+  <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold># Used internally for configuration updates.
+
 # ⚠️ Do not change this value.
-config_version: 0
+config_version: 1
