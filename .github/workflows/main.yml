@@ -1,4 +1,4 @@
-name: Release & Publish Packages (Beta Branch)
+name: Release & Publish Packages (Main Branch)
 
 on:
   push:
