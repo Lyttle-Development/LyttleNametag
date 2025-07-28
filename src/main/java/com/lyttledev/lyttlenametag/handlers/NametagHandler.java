@@ -14,6 +14,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSe
 import com.lyttledev.lyttlenametag.LyttleNametag;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -31,12 +32,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class NametagHandler implements Listener {
     private final LyttleNametag plugin;
-    private final Map<UUID, List<NametagEntity>> playerNametags = new ConcurrentHashMap<>();
+    private final Map<UUID, NametagEntity> playerNametags = new ConcurrentHashMap<>();
     private final AtomicInteger entityIdCounter = new AtomicInteger(Integer.MAX_VALUE / 2);
-
-    // For passenger chain: let Minecraft spacing handle most of the separation
-    private static final float BASE_Y_OFFSET = 0.0f;
-    private static final float LINE_HEIGHT = 0.0f;
 
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
@@ -59,9 +56,9 @@ public class NametagHandler implements Listener {
             spawnNametag(event.getPlayer());
 
             // Show existing nametags to the joining player
-            for (Player online : Bukkit.getOnlinePlayers()) {
-                if (online.equals(event.getPlayer())) continue;
-                showNametagToPlayer(online, event.getPlayer());
+            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                if (onlinePlayer.equals(event.getPlayer())) continue;
+                showNametagToPlayer(onlinePlayer, event.getPlayer());
             }
         }, 10L);
     }
@@ -73,19 +70,19 @@ public class NametagHandler implements Listener {
 
     @EventHandler
     public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
-        Player sneaking = event.getPlayer();
+        Player sneakingPlayer = event.getPlayer();
 
         if (event.isSneaking()) {
             // Hide nametag when sneaking
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (sneaking.equals(viewer)) continue;
-                hideNametagFromPlayer(sneaking, viewer);
+                if (sneakingPlayer.equals(viewer)) continue;
+                hideNametagFromPlayer(sneakingPlayer, viewer);
             }
         } else {
             // Show nametag when not sneaking
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (sneaking.equals(viewer)) continue;
-                showNametagToPlayer(sneaking, viewer);
+                if (sneakingPlayer.equals(viewer)) continue;
+                showNametagToPlayer(sneakingPlayer, viewer);
             }
         }
     }
@@ -110,24 +107,15 @@ public class NametagHandler implements Listener {
         String raw = LegacyComponentSerializer.legacySection().serialize(configMessage);
         String[] lines = raw.split("\\r?\\n");
 
-        List<NametagEntity> nametagEntities = new ArrayList<>();
+        NametagEntity nametagEntity = new NametagEntity(
+                entityIdCounter.decrementAndGet(),
+                player.getEntityId(),
+                MiniMessage.miniMessage().serialize(configMessage)
+        );
 
-        // Each line gets its own entity, but no artificial Y offset
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            int entityId = entityIdCounter.decrementAndGet();
 
-            NametagEntity nametagEntity = new NametagEntity(
-                    entityId,
-                    player.getEntityId(),
-                    line,
-                    0.0f // No offset; passenger chain will space them
-            );
 
-            nametagEntities.add(nametagEntity);
-        }
-
-        playerNametags.put(player.getUniqueId(), nametagEntities);
+        playerNametags.put(player.getUniqueId(), nametagEntity);
 
         // Send the nametag packets to all players except the owner
         for (Player viewer : Bukkit.getOnlinePlayers()) {
@@ -138,78 +126,71 @@ public class NametagHandler implements Listener {
     }
 
     private void showNametagToPlayer(Player owner, Player viewer) {
-        List<NametagEntity> entities = playerNametags.get(owner.getUniqueId());
-        if (entities == null || entities.isEmpty()) return;
+        NametagEntity entity = playerNametags.get(owner.getUniqueId());
+        if (entity == null) return;
 
         try {
-            // STEP 1: Spawn all armor stand entities AT PLAYER'S LOCATION (no Y offset)
-            for (NametagEntity entity : entities) {
-                org.bukkit.Location bukkit_loc = owner.getLocation().clone();
+            // STEP 1
+            org.bukkit.Location bukkit_loc = owner.getLocation().clone();
 
-                Location pe_location = new Location(
-                        bukkit_loc.getX(),
-                        bukkit_loc.getY(),
-                        bukkit_loc.getZ(),
-                        bukkit_loc.getYaw(),
-                        bukkit_loc.getPitch()
-                );
+            Location location = new Location(
+                    bukkit_loc.getX(),
+                    bukkit_loc.getY(),
+                    bukkit_loc.getZ(),
+                    bukkit_loc.getYaw(),
+                    bukkit_loc.getPitch()
+            );
 
-                WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
-                        entity.getEntityId(),
-                        UUID.randomUUID(),
-                        EntityTypes.ARMOR_STAND,
-                        pe_location,
-                        0f, // yaw
-                        0, // data
-                        new Vector3d(0, 0, 0) // velocity
-                );
+            WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
+                    entity.getEntityId(),
+                    UUID.randomUUID(),
+                    EntityTypes.TEXT_DISPLAY,
+                    location,
+                    0f, // yaw
+                    0, // data
+                    new Vector3d(0, 0, 0) // velocity
+            );
 
-                List<EntityData<?>> metadata = new ArrayList<>();
-                metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, (byte) 0x20)); // Invisible
+            List<EntityData<?>> metadata = new ArrayList<>();
+            metadata.add(new EntityData<>(0, EntityDataTypes.BYTE, (byte) 0x20)); // Invisible
 
-                String jsonText = "{\"text\":\"" + escapeJsonString(entity.getText()) + "\"}";
-                metadata.add(new EntityData<>(2, EntityDataTypes.OPTIONAL_COMPONENT, Optional.of(jsonText)));
+            String jsonText = "{\"text\":\"" + escapeJsonString(entity.getText()) + "\"}";
+            metadata.add(new EntityData<>(2, EntityDataTypes.OPTIONAL_COMPONENT, Optional.of(jsonText)));
 
-                metadata.add(new EntityData<>(3, EntityDataTypes.BOOLEAN, true)); // Custom name visible
-                metadata.add(new EntityData<>(5, EntityDataTypes.BOOLEAN, true)); // No gravity
-                // ArmorStand flags: 0x10 = marker, 0x01 = small
-                byte armorStandFlags = (byte) (0x01);
-                metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, armorStandFlags)); // Marker + small
+            metadata.add(new EntityData<>(3, EntityDataTypes.BOOLEAN, true)); // Custom name visible
+            metadata.add(new EntityData<>(5, EntityDataTypes.BOOLEAN, true)); // No gravity
+            // ArmorStand flags: 0x10 = marker, 0x01 = small
+            byte armorStandFlags = (byte) (0x01);
+            metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, armorStandFlags)); // Marker + small
 
-                WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
-                        entity.getEntityId(),
-                        metadata
-                );
+            WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(
+                    entity.getEntityId(),
+                    metadata
+            );
 
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
-            }
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
 
-            // STEP 2: Chain passengers BOTTOM TO TOP so spacing is tightest
+            // STEP 2
             int currentParent = owner.getEntityId();
-            List<NametagEntity> reversed = new ArrayList<>(entities);
-            Collections.reverse(reversed);
 
-            for (NametagEntity entity : reversed) {
-                WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(
-                        currentParent,
-                        new int[]{entity.getEntityId()}
-                );
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
-                currentParent = entity.getEntityId();
-            }
+            WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(
+                    currentParent,
+                    new int[]{entity.getEntityId()}
+            );
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
 
         } catch (Exception e) {
-            plugin.getLogger().warning("Error showing nametag: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().severe("Error showing nametag: " + e.getMessage());
         }
     }
 
     private void removeNametag(Player player) {
-        List<NametagEntity> entities = playerNametags.remove(player.getUniqueId());
-        if (entities != null) {
-            int[] entityIds = entities.stream().mapToInt(NametagEntity::getEntityId).toArray();
-            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityIds);
+        NametagEntity entity = playerNametags.remove(player.getUniqueId());
+        if (entity != null) {
+
+            int entityId = entity.getEntityId();
+            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
 
             for (Player viewer : Bukkit.getOnlinePlayers()) {
                 PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
@@ -231,11 +212,11 @@ public class NametagHandler implements Listener {
     }
 
     private void hideNametagFromPlayer(Player owner, Player viewer) {
-        List<NametagEntity> entities = playerNametags.get(owner.getUniqueId());
-        if (entities == null || entities.isEmpty()) return;
+        NametagEntity entity = playerNametags.get(owner.getUniqueId());
+        if (entity == null) return;
 
-        int[] entityIds = entities.stream().mapToInt(NametagEntity::getEntityId).toArray();
-        WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityIds);
+        int entityId = entity.getEntityId();
+        WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
 
         PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
     }
@@ -250,15 +231,11 @@ public class NametagHandler implements Listener {
     }
 
     public void removeAllNametagsOnShutdown() {
-        for (Map.Entry<UUID, List<NametagEntity>> entry : playerNametags.entrySet()) {
-            int[] entityIds = entry.getValue().stream()
-                    .mapToInt(NametagEntity::getEntityId)
-                    .toArray();
-            if (entityIds.length > 0) {
-                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityIds);
-                for (Player viewer : Bukkit.getOnlinePlayers()) {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
-                }
+        for (Map.Entry<UUID, NametagEntity> entry : playerNametags.entrySet()) {
+            int entityId = entry.getValue().getEntityId();
+            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
             }
         }
         playerNametags.clear();
@@ -266,8 +243,8 @@ public class NametagHandler implements Listener {
 
     public void reloadNametags() {
         removeAllNametagsOnShutdown();
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            spawnNametag(online);
+        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+            spawnNametag(onlinePlayer);
         }
     }
 
@@ -275,13 +252,11 @@ public class NametagHandler implements Listener {
         private final int entityId;
         private final int parentEntityId;
         private final String text;
-        private final float yOffset;
 
-        public NametagEntity(int entityId, int parentEntityId, String text, float yOffset) {
+        public NametagEntity(int entityId, int parentEntityId, String text) {
             this.entityId = entityId;
             this.parentEntityId = parentEntityId;
             this.text = text;
-            this.yOffset = yOffset;
         }
 
         public int getEntityId() {
@@ -292,9 +267,6 @@ public class NametagHandler implements Listener {
         }
         public String getText() {
             return text;
-        }
-        public float getYOffset() {
-            return yOffset;
         }
     }
 }
