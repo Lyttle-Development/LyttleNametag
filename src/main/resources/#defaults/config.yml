@@ -15,5 +15,8 @@ nametag: |-
   <dark_gray>@</dark_gray>
   <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold># Used internally for configuration updates.
 
+# Interval in seconds for checking updates.
+interval: 60.0
+
 # ⚠️ Do not change this value.
-config_version: 1
+config_version: 2
