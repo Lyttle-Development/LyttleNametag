@@ -33,7 +33,7 @@ public class LyttleNametagCommand implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("reload")) {
                 plugin.config.reload();
                 plugin.message.sendMessageRaw(sender, Component.text("The config has been reloaded"));
-                plugin.nametagHandler.reloadNametags();
+                plugin.nametagHandler.reload();
             }
         }
         return true;

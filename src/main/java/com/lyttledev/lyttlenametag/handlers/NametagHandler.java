@@ -21,6 +21,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,20 +34,35 @@ public class NametagHandler implements Listener {
     private final LyttleNametag plugin;
     private final Map<UUID, NametagEntity> playerNametags = new ConcurrentHashMap<>();
     private final AtomicInteger entityIdCounter = new AtomicInteger(Integer.MAX_VALUE / 2);
+    private BukkitTask timer;
 
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        startTimer();
+    }
+
+    public void reload() {
+        startTimer();
+        reloadNametags();
+    }
+
+    private void startTimer() {
+        if (timer != null) {
+            timer.cancel();
+        }
+
+        double interval = (double) plugin.config.general.get("interval");
 
         // Periodic cleanup and reload
-        new BukkitRunnable() {
+        this.timer = new BukkitRunnable() {
             @Override
             public void run() {
                 cleanupOrphans();
                 reloadNametags();
             }
-        // Run every 60 seconds after an initial delay of 10 ticks (0.5 seconds)
-        }.runTaskTimer(plugin, 10L, 60 * 20);
+            // Run every 60 seconds after an initial delay of 10 ticks (0.5 seconds)
+        }.runTaskTimer(plugin, 0, Math.round(interval * 20));
     }
 
     @EventHandler
@@ -193,7 +209,7 @@ public class NametagHandler implements Listener {
         playerNametags.clear();
     }
 
-    public void reloadNametags() {
+    private void reloadNametags() {
         removeAllNametagsOnShutdown();
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             spawnNametag(onlinePlayer);
