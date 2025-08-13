@@ -35,6 +35,7 @@ public class NametagHandler implements Listener {
     private final Map<UUID, NametagEntity> playerNametags = new ConcurrentHashMap<>();
     private final AtomicInteger entityIdCounter = new AtomicInteger(Integer.MAX_VALUE / 2);
     private BukkitTask timer;
+    private final double nametagSpawnHeight = 1.8; // Height above player's head for nametag
 
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
@@ -88,15 +89,17 @@ public class NametagHandler implements Listener {
         removeNametag(player);
 
         org.bukkit.Location baseLoc = player.getLocation().clone();
+        // Adjust the base location to be above the player's head
+        baseLoc.setY(baseLoc.getY() + nametagSpawnHeight); // Adjust height
         World world = baseLoc.getWorld();
 
         Replacements replacements = Replacements.builder()
                 .add("<PLAYER>", player.getName())
                 .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
                 .add("<WORLD>", world.getName())
-                .add("<X>", String.valueOf(player.getLocation().getBlockX()))
-                .add("<Y>", String.valueOf(player.getLocation().getBlockY()))
-                .add("<Z>", String.valueOf(player.getLocation().getBlockZ()))
+                .add("<X>", String.valueOf(baseLoc.getBlockX()))
+                .add("<Y>", String.valueOf(baseLoc.getBlockY()))
+                .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
                 .build();
 
         String nametag = (String) plugin.config.general.get("nametag");
@@ -126,6 +129,10 @@ public class NametagHandler implements Listener {
         try {
             // Convert Bukkit Location to PacketEvents Location
             org.bukkit.Location bukkit_location = owner.getLocation().clone();
+
+            // Adjust the base location to be above the player's head
+            bukkit_location.setY(bukkit_location.getY() + nametagSpawnHeight); // Adjust height
+
             Location packetevents_location = new Location(
                     bukkit_location.getX(),
                     bukkit_location.getY(),
