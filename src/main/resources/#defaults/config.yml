@@ -13,7 +13,7 @@ nametag: |-
   <gray>%luckperms_prefix%
   <PLAYER></gray>
   <dark_gray>@</dark_gray>
-  <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold># Used internally for configuration updates.
+  <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold>
 
 # Interval in seconds for checking updates.
 interval: 60.0
