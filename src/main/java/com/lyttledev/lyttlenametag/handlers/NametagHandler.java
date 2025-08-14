@@ -34,9 +34,6 @@ public class NametagHandler implements Listener {
     private BukkitTask timer;
     private final double nametagSpawnHeight = 1.8; // Height above player's head for nametag
 
-    // Used for safe flicker-free reload: stores old entities during reload
-    private final Map<UUID, NametagEntity> cachedOldNametags = new ConcurrentHashMap<>();
-
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
@@ -55,14 +52,13 @@ public class NametagHandler implements Listener {
 
         double interval = (double) plugin.config.general.get("interval");
 
-        // Periodic cleanup and reload
+        // Periodic cleanup and update
         this.timer = new BukkitRunnable() {
             @Override
             public void run() {
                 cleanupOrphans();
-                reloadNametags();
+                updateNametagTexts();
             }
-            // Run every 60 seconds after an initial delay of 10 ticks (0.5 seconds)
         }.runTaskTimer(plugin, 0, Math.round(interval * 20));
     }
 
@@ -184,6 +180,51 @@ public class NametagHandler implements Listener {
         }
     }
 
+    private void updateNametagTexts() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            NametagEntity entity = playerNametags.get(player.getUniqueId());
+            if (entity == null) continue;
+
+            org.bukkit.Location baseLoc = player.getLocation().clone();
+            baseLoc.setY(baseLoc.getY() + nametagSpawnHeight);
+            World world = baseLoc.getWorld();
+
+            Replacements replacements = Replacements.builder()
+                    .add("<PLAYER>", player.getName())
+                    .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
+                    .add("<WORLD>", world.getName())
+                    .add("<X>", String.valueOf(baseLoc.getBlockX()))
+                    .add("<Y>", String.valueOf(baseLoc.getBlockY()))
+                    .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
+                    .build();
+
+            String nametag = (String) plugin.config.general.get("nametag");
+            Component message = plugin.message.getMessageRaw(nametag, replacements, player);
+
+            // Only update if text actually changed
+            if (!entity.getText().equals(message)) {
+                entity.setText(message);
+                sendNametagTextUpdate(player, entity);
+            }
+        }
+    }
+
+    private void sendNametagTextUpdate(Player owner, NametagEntity entity) {
+        int entityId = entity.getEntityId();
+        // Only update text (metadata index 23)
+        List<EntityData<?>> metadata = new ArrayList<>();
+        Component text = entity.getText();
+        text = text.appendNewline();
+        metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+        WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.equals(owner)) {
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+            }
+        }
+    }
+
     private void removeNametag(Player player) {
         NametagEntity entity = playerNametags.remove(player.getUniqueId());
         if (entity != null) {
@@ -216,37 +257,17 @@ public class NametagHandler implements Listener {
         playerNametags.clear();
     }
 
-    /**
-     * Reloads all nametags in a way that prevents flicker:
-     * - Step 1: Cache and show all new nametags (so both new and old are visible)
-     * - Step 2: Remove all old nametags
-     */
     private void reloadNametags() {
-        // Step 1: Cache old nametags
-        cachedOldNametags.clear();
-        cachedOldNametags.putAll(playerNametags);
-
-        // Step 2: Spawn new nametags (new entityId, new Component etc.)
+        // Only respawn entities (destroy & create) if player list changes, not for text updates
+        removeAllNametagsOnShutdown();
         for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
             spawnNametag(onlinePlayer);
         }
-
-        // Step 3: Remove old nametags after a short delay (2 ticks = 0.1s)
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            for (NametagEntity oldEntity : cachedOldNametags.values()) {
-                int entityId = oldEntity.getEntityId();
-                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
-                for (Player viewer : Bukkit.getOnlinePlayers()) {
-                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
-                }
-            }
-            cachedOldNametags.clear();
-        }, 2L); // 2 ticks to ensure new ones are visible before removing old
     }
 
-    private static class NametagEntity {
+    public static class NametagEntity {
         private final int entityId;
-        private final Component text;
+        private Component text;
 
         public NametagEntity(int entityId, Component text) {
             this.entityId = entityId;
@@ -258,6 +279,9 @@ public class NametagHandler implements Listener {
         }
         public Component getText() {
             return text;
+        }
+        public void setText(Component text) {
+            this.text = text;
         }
     }
 }
