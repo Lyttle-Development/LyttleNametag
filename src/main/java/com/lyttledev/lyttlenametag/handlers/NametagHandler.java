@@ -94,44 +94,49 @@ public class NametagHandler implements Listener {
             }
         }, 10L);
         // Hard reload on join
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         removeNametag(event.getPlayer());
         // Hard reload on quit
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         // Hard reload on death (after death event to ensure state is correct)
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         // Hard reload on respawn (after respawn so location is correct)
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
         // Hard reload on world change
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerTeleport(PlayerTeleportEvent event) {
         // Hard reload on teleport (after teleport)
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
         // Hard reload on game mode change (after change)
-        Bukkit.getScheduler().runTask(plugin, this::reloadNametags);
+        reloadTimeOut();
+    }
+
+    private void reloadTimeOut() {
+        // Run the reloadNametags method after a delay
+        Bukkit.getScheduler().runTaskLater(plugin, this::reloadNametags, 20L); // 20 ticks = 1 second
     }
 
     private void spawnNametag(Player player) {
