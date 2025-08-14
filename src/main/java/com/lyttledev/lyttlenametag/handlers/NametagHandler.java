@@ -14,19 +14,22 @@ import com.lyttledev.lyttlenametag.LyttleNametag;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,17 +38,20 @@ public class NametagHandler implements Listener {
     private final Map<UUID, NametagEntity> playerNametags = new ConcurrentHashMap<>();
     private final AtomicInteger entityIdCounter = new AtomicInteger(Integer.MAX_VALUE / 2);
     private BukkitTask timer;
+    private BukkitTask hardReloadTimer;
     private final double nametagSpawnHeight = 1.8; // Height above player's head for nametag
 
     public NametagHandler(LyttleNametag plugin) {
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         startTimer();
+        startHardReloadTimer();
     }
 
     public void reload() {
         startTimer();
         reloadNametags();
+        startHardReloadTimer();
     }
 
     private void startTimer() {
@@ -55,42 +61,89 @@ public class NametagHandler implements Listener {
 
         double interval = (double) plugin.config.general.get("interval");
 
-        // Periodic cleanup and reload
+        // Periodic cleanup and update
         this.timer = new BukkitRunnable() {
             @Override
             public void run() {
                 cleanupOrphans();
+                updateNametagTexts();
+            }
+        }.runTaskTimer(plugin, 0, Math.round(interval * 20));
+    }
+
+    private void startHardReloadTimer() {
+        if (hardReloadTimer != null) {
+            hardReloadTimer.cancel();
+        }
+        // Hard reload every 60 seconds (1 minute)
+        this.hardReloadTimer = new BukkitRunnable() {
+            @Override
+            public void run() {
                 reloadNametags();
             }
-            // Run every 60 seconds after an initial delay of 10 ticks (0.5 seconds)
-        }.runTaskTimer(plugin, 0, Math.round(interval * 20));
+        }.runTaskTimer(plugin, 0, 20 * 60); // 20 ticks per second * 60 seconds
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        // Delay creation to ensure player is fully loaded
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             spawnNametag(event.getPlayer());
-
-            // Show existing nametags to the joining player
             for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                 if (onlinePlayer.equals(event.getPlayer())) continue;
                 showNametagToPlayer(onlinePlayer, event.getPlayer());
             }
-        }, 10L); // Run after 10 ticks (0.5 seconds)
+        }, 10L);
+        // Hard reload on join
+        reloadTimeOut();
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         removeNametag(event.getPlayer());
+        // Hard reload on quit
+        reloadTimeOut();
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        // Hard reload on death (after death event to ensure state is correct)
+        reloadTimeOut();
+    }
+
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        // Hard reload on respawn (after respawn so location is correct)
+        reloadTimeOut();
+    }
+
+    @EventHandler
+    public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
+        // Hard reload on world change
+        reloadTimeOut();
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        // Hard reload on teleport (after teleport)
+        reloadTimeOut();
+    }
+
+    @EventHandler
+    public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
+        // Hard reload on game mode change (after change)
+        reloadTimeOut();
+    }
+
+    private void reloadTimeOut() {
+        // Run the reloadNametags method after a delay
+        Bukkit.getScheduler().runTaskLater(plugin, this::reloadNametags, 20L); // 20 ticks = 1 second
     }
 
     private void spawnNametag(Player player) {
         removeNametag(player);
 
         org.bukkit.Location baseLoc = player.getLocation().clone();
-        // Adjust the base location to be above the player's head
-        baseLoc.setY(baseLoc.getY() + nametagSpawnHeight); // Adjust height
+        baseLoc.setY(baseLoc.getY() + nametagSpawnHeight);
         World world = baseLoc.getWorld();
 
         Replacements replacements = Replacements.builder()
@@ -112,7 +165,6 @@ public class NametagHandler implements Listener {
 
         playerNametags.put(player.getUniqueId(), nametagEntity);
 
-        // Send the nametag packets to all players except the owner
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (!viewer.equals(player)) {
                 showNametagToPlayer(player, viewer);
@@ -127,11 +179,8 @@ public class NametagHandler implements Listener {
         int entityId = entity.getEntityId();
 
         try {
-            // Convert Bukkit Location to PacketEvents Location
             org.bukkit.Location bukkit_location = owner.getLocation().clone();
-
-            // Adjust the base location to be above the player's head
-            bukkit_location.setY(bukkit_location.getY() + nametagSpawnHeight); // Adjust height
+            bukkit_location.setY(bukkit_location.getY() + nametagSpawnHeight);
 
             Location packetevents_location = new Location(
                     bukkit_location.getX(),
@@ -141,46 +190,75 @@ public class NametagHandler implements Listener {
                     bukkit_location.getPitch()
             );
 
-            // Create the spawn packet for the text display entity
             WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
                     entityId,
                     UUID.randomUUID(),
                     EntityTypes.TEXT_DISPLAY,
                     packetevents_location,
-                    0f, // yaw
-                    0, // data
-                    new Vector3d(0, 0, 0) // velocity
+                    0f,
+                    0,
+                    new Vector3d(0, 0, 0)
             );
 
-            // Add metadata to the Text Display, see protocol info here: https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata#Text_Display
             List<EntityData<?>> metadata = new ArrayList<>();
-
-            // Center the nametag above the player's head and let it follow the surrounding players.
             metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
-
-            // Set max distance to 32 blocks
             metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, 0.25f));
-
-            // Set the text content of the text display entity
             Component text = entity.getText();
             text = text.appendNewline();
             metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
-
-            // Set background color to fully transparent
             metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
-
-            // Asign the metadata to the entity
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
 
-            // Set the nametag entity as a passenger of the player entity
             WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(ownerId, new int[]{entityId});
 
-            // Send the packets to the viewer (player who should see the nametag)
             PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
             PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
             PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
         } catch (Exception e) {
             plugin.getLogger().severe("Error showing nametag: " + e.getMessage());
+        }
+    }
+
+    private void updateNametagTexts() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            NametagEntity entity = playerNametags.get(player.getUniqueId());
+            if (entity == null) continue;
+
+            org.bukkit.Location baseLoc = player.getLocation().clone();
+            baseLoc.setY(baseLoc.getY() + nametagSpawnHeight);
+            World world = baseLoc.getWorld();
+
+            Replacements replacements = Replacements.builder()
+                    .add("<PLAYER>", player.getName())
+                    .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
+                    .add("<WORLD>", world.getName())
+                    .add("<X>", String.valueOf(baseLoc.getBlockX()))
+                    .add("<Y>", String.valueOf(baseLoc.getBlockY()))
+                    .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
+                    .build();
+
+            String nametag = (String) plugin.config.general.get("nametag");
+            Component message = plugin.message.getMessageRaw(nametag, replacements, player);
+
+            if (!entity.getText().equals(message)) {
+                entity.setText(message);
+                sendNametagTextUpdate(player, entity);
+            }
+        }
+    }
+
+    private void sendNametagTextUpdate(Player owner, NametagEntity entity) {
+        int entityId = entity.getEntityId();
+        List<EntityData<?>> metadata = new ArrayList<>();
+        Component text = entity.getText();
+        text = text.appendNewline();
+        metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+        WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.equals(owner)) {
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+            }
         }
     }
 
@@ -223,9 +301,9 @@ public class NametagHandler implements Listener {
         }
     }
 
-    private static class NametagEntity {
+    public static class NametagEntity {
         private final int entityId;
-        private final Component text;
+        private Component text;
 
         public NametagEntity(int entityId, Component text) {
             this.entityId = entityId;
@@ -237,6 +315,9 @@ public class NametagHandler implements Listener {
         }
         public Component getText() {
             return text;
+        }
+        public void setText(Component text) {
+            this.text = text;
         }
     }
 }
