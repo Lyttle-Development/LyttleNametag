@@ -14,9 +14,13 @@ nametag: |-
   <PLAYER></gray>
   <dark_gray>@</dark_gray>
   <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold>
+  <red>🖤 %math_0:0_({player_health})%<dark_grey>/20
 
 # Interval in seconds for checking updates.
-interval: 60.0
+interval: 0.5
+
+# The maximum distance at which the nametag will be visible. (In blocks)
+view_distance: 64
 
 # ⚠️ Do not change this value.
-config_version: 2
+config_version: 3
