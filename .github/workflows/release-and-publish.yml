@@ -1,9 +1,10 @@
-name: Release and Publish Artifacts
+name: Release & Publish Packages (Release & Alpha Branches)
 
 on:
   push:
     branches:
       - main
+      - alpha
 
 jobs:
   build-and-release:
@@ -12,6 +13,8 @@ jobs:
     env:
       GPR_USER: ${{ secrets.GPR_USER }}
       GPR_API_KEY: ${{ secrets.GPR_API_KEY }}
+      # Set CHANNEL according to branch
+      CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,21 +42,27 @@ jobs:
         id: get_version
         run: |
           VERSION=$(grep '^pluginVersion=' gradle.properties | cut -d'=' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if [ "${{ env.CHANNEL }}" = "Release" ]; then
+            TAG="v$VERSION"
+          else
+            # Alpha: version like 1.2.4-ALPHA.13, append run number
+            TAG="v${VERSION}-ALPHA.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create git tag for release
         id: tag_release
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a v${{ steps.get_version.outputs.version }} -m "Release v${{ steps.get_version.outputs.version }}"
-          git push origin v${{ steps.get_version.outputs.version }}
+          git tag -a ${{ steps.get_version.outputs.tag }} -m "Release ${{ steps.get_version.outputs.tag }}"
+          git push origin ${{ steps.get_version.outputs.tag }}
 
       - name: Create GitHub Release and Upload JAR
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
+          tag_name: ${{ steps.get_version.outputs.tag }}
           files: build/libs/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -64,7 +73,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
-      CHANNEL: Release
+      CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
     steps:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
@@ -75,7 +84,7 @@ jobs:
       - name: Publish to Hangar
         env:
           HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
-          CHANNEL: Release
+          CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
         run: |
           ./gradlew publishPluginJarToHangar -PjarPath=./dist/*.jar --stacktrace
 
@@ -85,7 +94,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
-      CHANNEL: Release
+      CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
     steps:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
@@ -96,6 +105,6 @@ jobs:
       - name: Publish to Modrinth
         env:
           MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
-          CHANNEL: Release
+          CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
         run: |
           ./gradlew publishPluginJarToModrinth -PjarPath=./dist/*.jar --stacktrace
