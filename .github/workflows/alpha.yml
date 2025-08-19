@@ -35,10 +35,25 @@ jobs:
           name: plugin-jar
           path: build/libs/*.jar
 
-      - name: Create GitHub Release and Upload JAR
+      - name: Get version from Gradle
+        id: get_version
+        run: |
+          VERSION=$(./gradlew -q printVersion)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create git tag for release
+        id: tag_release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a v${{ steps.get_version.outputs.version }} -m "Alpha v${{ steps.get_version.outputs.version }}"
+          git push origin v${{ steps.get_version.outputs.version }}
+
+      - name: Create GitHub Alpha and Upload JAR
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.get_version.outputs.version }}
           files: build/libs/*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
