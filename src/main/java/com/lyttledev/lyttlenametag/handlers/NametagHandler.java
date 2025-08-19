@@ -14,22 +14,19 @@ import com.lyttledev.lyttlenametag.LyttleNametag;
 import com.lyttledev.lyttleutils.types.Message.Replacements;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerGameModeChangeEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -190,23 +187,40 @@ public class NametagHandler implements Listener {
                     bukkit_location.getPitch()
             );
 
+            // Create the spawn packet for the text display entity
             WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
                     entityId,
                     UUID.randomUUID(),
                     EntityTypes.TEXT_DISPLAY,
                     packetevents_location,
-                    0f,
-                    0,
-                    new Vector3d(0, 0, 0)
+                    0f, // yaw
+                    0, // data
+                    new Vector3d(0, 0, 0) // velocity
             );
 
+            // Add metadata to the Text Display, see protocol info here: https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata#Text_Display
             List<EntityData<?>> metadata = new ArrayList<>();
+
+            // Center the nametag above the player's head and let it follow the surrounding players.
             metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
-            metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, 0.25f));
+
+            float defaultViewDistance = 1.0f; // default (1 unit) equals 64 blocks
+            float blocksPerDefault = 64.0f;
+            float oneBlockViewDistance = defaultViewDistance / blocksPerDefault;
+
+            int blocksConfig = (int) plugin.config.general.get("view_distance");
+            int blocks = blocksConfig > 0 ? blocksConfig : 64; // Default to 64 blocks if not set
+
+            metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, oneBlockViewDistance * blocks));
+
+            // Set the text content of the text display entity
             Component text = entity.getText();
             text = text.appendNewline();
             metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+
+            // Set background color to fully transparent
             metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
+
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
 
             WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(ownerId, new int[]{entityId});

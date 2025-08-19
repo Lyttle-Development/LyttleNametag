@@ -19,5 +19,8 @@ nametag: |-
 # Interval in seconds for checking updates.
 interval: 0.5
 
+# The maximum distance at which the nametag will be visible. (In blocks)
+view_distance: 64
+
 # ⚠️ Do not change this value.
-config_version: 2
+config_version: 3
