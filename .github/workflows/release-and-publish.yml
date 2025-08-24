@@ -17,9 +17,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Checks out your code so the workflow can access it
 
-      - name: Validate Gradle wrapper
+      - name: Validate Gradle Wrapper
         uses: gradle/actions/wrapper-validation@v3
+        # Ensures the checked-in Gradle wrapper is valid and secure
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -27,17 +29,11 @@ jobs:
           distribution: 'corretto'
           java-version: 21
           check-latest: true
-
-      - name: Setup GitHub Packages credentials for Gradle
-        run: |
-          echo "githubPackagesUsername=${GPR_USER}" >> $GITHUB_ENV
-          echo "githubPackagesPassword=${GPR_API_KEY}" >> $GITHUB_ENV
+        # Sets up Java 21 for building and publishing
 
       - name: Build project
         run: |
-          ./gradlew shadowJar --stacktrace \
-            -Pgpr.user="${GPR_USER}" \
-            -Pgpr.key="${GPR_API_KEY}"
+          ./gradlew build shadowJar --stacktrace
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
@@ -74,7 +70,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-hangar:
-    needs: build-and-release
     if: github.repository_owner == 'Lyttle-Development'
     runs-on: ubuntu-22.04
     env:
@@ -85,6 +80,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Checks out your code so the workflow can access it
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v3
+        # Ensures the checked-in Gradle wrapper is valid and secure
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -92,31 +92,21 @@ jobs:
           distribution: 'corretto'
           java-version: 21
           check-latest: true
+        # Sets up Java 21 for building and publishing
 
-      - name: Setup GitHub Packages credentials for Gradle
+      - name: Build project
         run: |
-          echo "githubPackagesUsername=${GPR_USER}" >> $GITHUB_ENV
-          echo "githubPackagesPassword=${GPR_API_KEY}" >> $GITHUB_ENV
-
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-jar
-          path: ./dist
+          ./gradlew build shadowJar --stacktrace
 
       - name: Publish to Hangar
         env:
           HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
           CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
-          GPR_USER: ${{ secrets.GPR_USER }}
-          GPR_API_KEY: ${{ secrets.GPR_API_KEY }}
         run: |
-          ./gradlew publishPluginPublicationToHangar --stacktrace \
-            -Pgpr.user="${GPR_USER}" \
-            -Pgpr.key="${GPR_API_KEY}"
+          # Uploads the plugin to Hangar platform
+          ./gradlew publishPluginPublicationToHangar --stacktrace
 
   publish-modrinth:
-    needs: build-and-release
     if: github.repository_owner == 'Lyttle-Development'
     runs-on: ubuntu-22.04
     env:
@@ -127,6 +117,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Checks out your code so the workflow can access it
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v3
+        # Ensures the checked-in Gradle wrapper is valid and secure
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -134,25 +129,16 @@ jobs:
           distribution: 'corretto'
           java-version: 21
           check-latest: true
+        # Sets up Java 21 for building and publishing
 
-      - name: Setup GitHub Packages credentials for Gradle
+      - name: Build project
         run: |
-          echo "githubPackagesUsername=${GPR_USER}" >> $GITHUB_ENV
-          echo "githubPackagesPassword=${GPR_API_KEY}" >> $GITHUB_ENV
-
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-jar
-          path: ./dist
+          ./gradlew build shadowJar --stacktrace
 
       - name: Publish to Modrinth
         env:
           MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
           CHANNEL: ${{ github.ref_name == 'main' && 'Release' || 'Alpha' }}
-          GPR_USER: ${{ secrets.GPR_USER }}
-          GPR_API_KEY: ${{ secrets.GPR_API_KEY }}
         run: |
-          ./gradlew modrinth --stacktrace \
-            -Pgpr.user="${GPR_USER}" \
-            -Pgpr.key="${GPR_API_KEY}"
+          # Publishes to Modrinth (ensure your build.gradle is configured for this)
+          ./gradlew modrinth --stacktrace
