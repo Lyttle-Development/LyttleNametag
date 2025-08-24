@@ -89,6 +89,16 @@ public final class LyttleNametag extends JavaPlugin {
                 // Recheck if the config is fully migrated.
                 migrateConfig();
                 break;
+            case "2":
+                // Migrate config entries.
+                config.general.set("view_distance", config.defaultGeneral.get("view_distance"));
+
+                // Update config version.
+                config.general.set("config_version", 3);
+
+                // Recheck if the config is fully migrated.
+                migrateConfig();
+                break;
             default:
                 break;
         }
