@@ -35,7 +35,7 @@ jobs:
 
       - name: Build project
         run: |
-          ./gradlew build --stacktrace \
+          ./gradlew shadowJar --stacktrace \
             -Pgpr.user="${GPR_USER}" \
             -Pgpr.key="${GPR_API_KEY}"
 
