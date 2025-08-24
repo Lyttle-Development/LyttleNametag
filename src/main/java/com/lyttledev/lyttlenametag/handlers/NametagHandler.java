@@ -205,7 +205,9 @@ public class NametagHandler implements Listener {
             metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
 
             float defaultViewDistance = 1.0f; // default (1 unit) equals 64 blocks
-            float blocksPerDefault = 64.0f;
+            // Tested: Default is 80 for our metadata.
+            // Default Minecraft client nametag distance is 64 blocks.
+            float blocksPerDefault = 80.0f;
             float oneBlockViewDistance = defaultViewDistance / blocksPerDefault;
 
             int blocksConfig = (int) plugin.config.general.get("view_distance");
