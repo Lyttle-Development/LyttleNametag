@@ -1,30 +1,30 @@
 package com.lyttledev.lyttlenametag.types;
 
 import com.lyttledev.lyttlenametag.LyttleNametag;
-import com.lyttledev.lyttleutils.types.Config;
+import com.lyttledev.lyttleutils.types.YamlConfig;
 
 public class Configs {
     private final LyttleNametag plugin;
 
     // Configs
-    public Config general;
-    public Config messages;
+    public YamlConfig general;
+    public YamlConfig messages;
 
     // Default configs
-    public Config defaultGeneral;
-    public Config defaultMessages;
+    public YamlConfig defaultGeneral;
+    public YamlConfig defaultMessages;
 
 
     public Configs(LyttleNametag plugin) {
         this.plugin = plugin;
 
         // Configs
-        general = new Config(plugin, "config.yml");
-        messages = new Config(plugin, "messages.yml");
+        general = new YamlConfig(plugin, "config.yml");
+        messages = new YamlConfig(plugin, "messages.yml");
 
         // Default configs
-        defaultGeneral = new Config(plugin, "#defaults/config.yml");
-        defaultMessages = new Config(plugin, "#defaults/messages.yml");
+        defaultGeneral = new YamlConfig(plugin, "#defaults/config.yml");
+        defaultMessages = new YamlConfig(plugin, "#defaults/messages.yml");
     }
 
     public void reload() {
