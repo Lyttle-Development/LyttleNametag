@@ -92,7 +92,6 @@ public final class LyttleNametag extends JavaPlugin {
             case "2":
                 // Migrate config entries.
                 config.general.set("view_distance", config.defaultGeneral.get("view_distance"));
-                config.general.set("background_opacity", config.defaultGeneral.get("background_opacity"));
 
                 // Update config version.
                 config.general.set("config_version", 3);

@@ -217,12 +217,11 @@ public class NametagHandler implements Listener {
 
             // Set the text content of the text display entity
             Component text = entity.getText();
+            text = text.appendNewline();
             metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
 
             // Set background color to fully transparent
-            int backgroundOpacityConfig = (int) plugin.config.general.get("background_opacity");
-            int backgroundOpacity = backgroundOpacityConfig >= 0 && backgroundOpacityConfig <= 255 ? backgroundOpacityConfig : 80;
-            metadata.add(new EntityData<>(25, EntityDataTypes.INT, backgroundOpacity));
+            metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
 
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
 

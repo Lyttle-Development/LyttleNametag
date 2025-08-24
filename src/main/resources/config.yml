@@ -22,8 +22,5 @@ interval: 0.5
 # The maximum distance at which the nametag will be visible. (In blocks) (default: 64)
 view_distance: 64
 
-# Background opacity (0-100). 0 = fully transparent, 100 = fully opaque. (default: 80)
-background_opacity: 80
-
 # ⚠️ Do not change this value.
 config_version: 3
