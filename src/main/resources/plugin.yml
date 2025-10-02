@@ -8,11 +8,10 @@ authors:
   - ThatsATim
   - Stualyttle
 
-#depend:
-#  - packetevents
 
 softdepend:
   - PlaceholderAPI
+  # Needed for Packet Events compatibility:
   - ProtocolLib
   - ProtocolSupport
   - ViaVersion

@@ -12,14 +12,14 @@ plugins {
 
 repositories {
     mavenLocal()
-    maven { url = uri("https://repo.papermc.io/repository/maven-public/") }
+    maven { url = uri("https://repo.papermc.io/repository/maven-public/") } // PaperMC
     maven { url = uri("https://oss.sonatype.org/content/groups/public/") }
     maven { url = uri("https://jitpack.io") }
     maven { url = uri("https://repo.maven.apache.org/maven2/") }
-    maven { url = uri("https://repo.extendedclip.com/releases/") }
-    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") }
-    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") }
-    maven {
+    maven { url = uri("https://repo.extendedclip.com/releases/") } // PlaceholderAPI
+    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") } // PacketEvents
+    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") } // PacketEvents
+    maven { // LyttleUtils GitHub Packages
         name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/Lyttle-Development/LyttleUtils")
         credentials {
@@ -32,7 +32,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:" + (property("paperVersion") as String) + "-R0.1-SNAPSHOT")
     compileOnly("me.clip:placeholderapi:2.11.6")
-    implementation("com.github.retrooper:packetevents-spigot:2.9.5")
+    implementation("com.github.retrooper:packetevents-spigot:2.9.4")
     implementation("com.lyttledev:lyttleutils:1.2.0")
 }
 
@@ -44,13 +44,12 @@ java.sourceCompatibility = JavaVersion.VERSION_21
 // --- Shadow JAR configuration ---
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    configurations = listOf(project.configurations.runtimeClasspath.get())
-    dependencies {
-        include(dependency("com.github.retrooper:packetevents-spigot"))
-        include(dependency("com.lyttledev:lyttleutils"))
-    }
-    // Relocate PacketEvents package to prevent classpath conflicts
+
+    // Shade everything on runtime classpath; do not restrict with include filters
+    // Relocate both possible base packages used by PacketEvents across versions
     relocate("com.github.retrooper.packetevents", "com.lyttledev.shaded.packetevents")
+    relocate("io.github.retrooper.packetevents", "com.lyttledev.shaded.packetevents")
+    minimize() // Minimize to reduce jar size
 }
 
 // Disable regular jar to prevent accidental use
@@ -60,7 +59,7 @@ tasks.named<Jar>("jar") {
 
 // Ensure build depends on shadowJar and copyContents
 tasks.named("build") {
-    dependsOn("shadowJar", "copyContents")
+    dependsOn("shadowJar", "copyContents", "verifyShadow")
 }
 
 // --- Encoding setup for Java and Javadoc ---

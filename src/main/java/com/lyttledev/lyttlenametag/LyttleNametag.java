@@ -1,12 +1,13 @@
 package com.lyttledev.lyttlenametag;
 
-import com.lyttledev.lyttlenametag.commands.*;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.lyttledev.lyttlenametag.commands.LyttleNametagCommand;
 import com.lyttledev.lyttlenametag.handlers.NametagHandler;
 import com.lyttledev.lyttlenametag.types.Configs;
-
 import com.lyttledev.lyttleutils.utils.communication.Console;
 import com.lyttledev.lyttleutils.utils.communication.Message;
 import com.lyttledev.lyttleutils.utils.storage.GlobalConfig;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -19,7 +20,15 @@ public final class LyttleNametag extends JavaPlugin {
     public NametagHandler nametagHandler;
 
     @Override
+    public void onLoad() {
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        //On Bukkit, calling this here is essential, hence the name "load"
+        PacketEvents.getAPI().load();
+    }
+
+    @Override
     public void onEnable() {
+        PacketEvents.getAPI().init();
         saveDefaultConfig();
         // Setup config after creating the configs
         this.config = new Configs(this);
@@ -41,6 +50,7 @@ public final class LyttleNametag extends JavaPlugin {
     @Override
     public void onDisable() {
         this.nametagHandler.removeAllNametagsOnShutdown();
+        PacketEvents.getAPI().terminate();
     }
 
     @Override
