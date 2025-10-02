@@ -6,20 +6,20 @@ plugins {
     `java-library`
     `maven-publish`
     id("io.papermc.hangar-publish-plugin") version "0.1.2"
-    id("com.gradleup.shadow") version "8.3.6"
+    id("com.gradleup.shadow") version "9.2.2"
     id("com.modrinth.minotaur") version "2.+"
 }
 
 repositories {
     mavenLocal()
-    maven { url = uri("https://repo.papermc.io/repository/maven-public/") } // PaperMC
+    maven { url = uri("https://repo.papermc.io/repository/maven-public/") }
     maven { url = uri("https://oss.sonatype.org/content/groups/public/") }
     maven { url = uri("https://jitpack.io") }
     maven { url = uri("https://repo.maven.apache.org/maven2/") }
-    maven { url = uri("https://repo.extendedclip.com/releases/") } // PlaceholderAPI
-    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") } // PacketEvents
-    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") } // PacketEvents
-    maven { // LyttleUtils GitHub Packages
+    maven { url = uri("https://repo.extendedclip.com/releases/") }
+    maven { url = uri("https://repo.codemc.io/repository/maven-releases/") }
+    maven { url = uri("https://repo.codemc.io/repository/maven-snapshots/") }
+    maven {
         name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/Lyttle-Development/LyttleUtils")
         credentials {
@@ -32,7 +32,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:" + (property("paperVersion") as String) + "-R0.1-SNAPSHOT")
     compileOnly("me.clip:placeholderapi:2.11.6")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.9.4")
+    implementation("com.github.retrooper:packetevents-spigot:2.9.5")
     implementation("com.lyttledev:lyttleutils:1.2.0")
 }
 
@@ -46,8 +46,11 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
     configurations = listOf(project.configurations.runtimeClasspath.get())
     dependencies {
+        include(dependency("com.github.retrooper:packetevents-spigot"))
         include(dependency("com.lyttledev:lyttleutils"))
     }
+    // Relocate PacketEvents package to prevent classpath conflicts
+    relocate("com.github.retrooper.packetevents", "com.lyttledev.shaded.packetevents")
 }
 
 // Disable regular jar to prevent accidental use
@@ -192,5 +195,5 @@ modrinth {
             else -> "alpha"
         }
     )
-    loaders.set(listOf("paper")) // Or add "spigot", "bukkit" etc as appropriate
+    loaders.set(listOf("paper"))
 }

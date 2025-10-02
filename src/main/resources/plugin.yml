@@ -8,11 +8,17 @@ authors:
   - ThatsATim
   - Stualyttle
 
-depend:
-  - packetevents
+#depend:
+#  - packetevents
 
 softdepend:
   - PlaceholderAPI
+  - ProtocolLib
+  - ProtocolSupport
+  - ViaVersion
+  - ViaBackwards
+  - ViaRewind
+  - Geyser-Spigot
 
 commands:
   lyttlenametag:
