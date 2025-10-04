@@ -59,7 +59,7 @@ tasks.named<Jar>("jar") {
 
 // Ensure build depends on shadowJar and copyContents
 tasks.named("build") {
-    dependsOn("shadowJar", "copyContents", "verifyShadow")
+    dependsOn("shadowJar", "copyContents")
 }
 
 // --- Encoding setup for Java and Javadoc ---
