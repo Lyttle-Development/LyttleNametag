@@ -133,6 +133,13 @@ public class NametagHandler implements Listener {
         reloadTimeOut();
     }
 
+    // Instant, no-delay update on toggle sneak to avoid flicker and slowness
+    @EventHandler
+    public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
+        // Update nametag in-place (metadata only), do NOT trigger reload/destroy/spawn
+        updateSneakStateNametag(event.getPlayer(), event.isSneaking());
+    }
+
     private void reloadTimeOut() {
         // Run the reloadNametags method after a delay
         Bukkit.getScheduler().runTaskLater(plugin, this::reloadNametags, 20L); // 20 ticks = 1 second
@@ -155,6 +162,7 @@ public class NametagHandler implements Listener {
                 .build();
 
         // Render the nametag template into separate lines and chain them bottom-up (each line rides the previous one).
+        // NOTE: We always allocate the full template line count to avoid re-spawn flicker on sneak toggles.
         String nametagTemplate = (String) plugin.config.general.get("nametag");
         List<Component> linesBottomUp = renderLinesBottomUp(nametagTemplate, replacements, player);
 
@@ -175,6 +183,11 @@ public class NametagHandler implements Listener {
             if (!viewer.equals(player)) {
                 showNametagToPlayer(player, viewer);
             }
+        }
+
+        // If the player is currently sneaking, immediately hide by swapping text to empty (no respawn).
+        if (player.isSneaking()) {
+            updateSneakStateNametag(player, true);
         }
     }
 
@@ -296,22 +309,26 @@ public class NametagHandler implements Listener {
                     .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
                     .build();
 
-            String nametagTemplate = (String) plugin.config.general.get("nametag");
-            List<Component> newLinesBottomUp = renderLinesBottomUp(nametagTemplate, replacements, player);
-
-            // If counts differ, respawn the whole chain for this player (safer)
-            if (entity.getLines().size() != newLinesBottomUp.size()) {
-                entity.setLines(newLinesBottomUp);
-                // Destroy old and respawn new entities for everyone
-                removeNametag(player);
-                spawnNametag(player);
-                continue;
+            // When sneaking, keep entity count stable and set all lines to empty to avoid respawn flicker.
+            List<Component> newLinesBottomUp;
+            if (player.isSneaking()) {
+                newLinesBottomUp = emptyLines(entity.getEntityIds().size());
+            } else {
+                String nametagTemplate = (String) plugin.config.general.get("nametag");
+                List<Component> rendered = renderLinesBottomUp(nametagTemplate, replacements, player);
+                // Normalize to the current entity count to avoid destroy/spawn
+                newLinesBottomUp = normalizeToSize(rendered, entity.getEntityIds().size());
             }
 
-            // Same count: update changed lines only
+            // Update changed lines only (no destroy/spawn to prevent flicker)
             boolean anyChanged = false;
+            List<Component> old = entity.getLines();
+            if (old.size() != newLinesBottomUp.size()) {
+                // Sizes should generally match due to normalization; if not, normalize old view and continue
+                newLinesBottomUp = normalizeToSize(newLinesBottomUp, old.size());
+            }
             for (int i = 0; i < newLinesBottomUp.size(); i++) {
-                if (!newLinesBottomUp.get(i).equals(entity.getLines().get(i))) {
+                if (!newLinesBottomUp.get(i).equals(old.get(i))) {
                     anyChanged = true;
                     break;
                 }
@@ -322,6 +339,72 @@ public class NametagHandler implements Listener {
                 sendNametagTextUpdate(player, entity);
             }
         }
+    }
+
+    // Instant metadata-only swap for sneak state (no destroy/spawn, no delay).
+    private void updateSneakStateNametag(Player player, boolean sneaking) {
+        NametagEntity entity = playerNametags.get(player.getUniqueId());
+        if (entity == null) return;
+
+        List<Component> target;
+        if (sneaking) {
+            target = emptyLines(entity.getEntityIds().size());
+        } else {
+            org.bukkit.Location baseLoc = player.getLocation().clone();
+            baseLoc.setY(baseLoc.getY() + nametagSpawnHeight);
+            World world = baseLoc.getWorld();
+
+            Replacements replacements = Replacements.builder()
+                    .add("<PLAYER>", player.getName())
+                    .add("<DISPLAYNAME>", player.displayName() != null ? player.displayName().toString() : player.getName())
+                    .add("<WORLD>", world.getName())
+                    .add("<X>", String.valueOf(baseLoc.getBlockX()))
+                    .add("<Y>", String.valueOf(baseLoc.getBlockY()))
+                    .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
+                    .build();
+
+            String nametagTemplate = (String) plugin.config.general.get("nametag");
+            List<Component> rendered = renderLinesBottomUp(nametagTemplate, replacements, player);
+            target = normalizeToSize(rendered, entity.getEntityIds().size());
+        }
+
+        // Only send updates for lines that changed
+        boolean anyChanged = false;
+        List<Component> old = entity.getLines();
+        for (int i = 0; i < target.size(); i++) {
+            if (!target.get(i).equals(old.get(i))) {
+                anyChanged = true;
+                break;
+            }
+        }
+        if (!anyChanged) return;
+
+        entity.setLines(target);
+        sendNametagTextUpdate(player, entity);
+    }
+
+    private List<Component> normalizeToSize(List<Component> src, int size) {
+        List<Component> out = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            if (i < src.size()) {
+                out.add(src.get(i));
+            } else {
+                out.add(Component.text(""));
+            }
+        }
+        // If src is longer, trim to size (avoid respawn)
+        if (out.size() > size) {
+            return new ArrayList<>(out.subList(0, size));
+        }
+        return out;
+    }
+
+    private List<Component> emptyLines(int size) {
+        List<Component> out = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            out.add(Component.text(""));
+        }
+        return out;
     }
 
     private void sendNametagTextUpdate(Player owner, NametagEntity entity) {
