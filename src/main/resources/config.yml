@@ -10,8 +10,8 @@
 
 # nametag
 nametag: |-
-  <gray>%luckperms_prefix%
-  <PLAYER></gray>
+  <gray>%luckperms_prefix%</gray>
+  <gray><PLAYER></gray>
   <dark_gray>@</dark_gray>
   <yellow>%vault_eco_balance_formatted%</yellow> <gold>Tokens</gold>
   <red>🖤 %math_0:0_({player_health})%<dark_grey>/20

@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.protocol.world.Location;
 import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.util.Vector3f;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPassengers;
@@ -24,6 +25,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -152,12 +154,19 @@ public class NametagHandler implements Listener {
                 .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
                 .build();
 
-        String nametag = (String) plugin.config.general.get("nametag");
-        Component message = plugin.message.getMessageRaw(nametag, replacements, player);
+        // Render the nametag template into separate lines and chain them bottom-up (each line rides the previous one).
+        String nametagTemplate = (String) plugin.config.general.get("nametag");
+        List<Component> linesBottomUp = renderLinesBottomUp(nametagTemplate, replacements, player);
+
+        // Create entity IDs for each line (one Text Display per line)
+        List<Integer> entityIds = new ArrayList<>(linesBottomUp.size());
+        for (int i = 0; i < linesBottomUp.size(); i++) {
+            entityIds.add(entityIdCounter.decrementAndGet());
+        }
 
         NametagEntity nametagEntity = new NametagEntity(
-                entityIdCounter.decrementAndGet(),
-                message
+                entityIds,
+                linesBottomUp
         );
 
         playerNametags.put(player.getUniqueId(), nametagEntity);
@@ -169,11 +178,24 @@ public class NametagHandler implements Listener {
         }
     }
 
+    private List<Component> renderLinesBottomUp(String nametagTemplate, Replacements replacements, Player player) {
+        // Split by newline, preserve trailing empty lines, then render each line separately
+        String[] rawLines = nametagTemplate.split("\\R", -1);
+        List<Component> topDown = new ArrayList<>(rawLines.length);
+        for (String rawLine : rawLines) {
+            Component lineComponent = plugin.message.getMessageRaw(rawLine, replacements, player);
+            topDown.add(lineComponent);
+        }
+        // Reverse to bottom-up so the last (often empty) line becomes the bottom-most rider
+        List<Component> bottomUp = new ArrayList<>(topDown);
+        Collections.reverse(bottomUp);
+        return bottomUp;
+    }
+
     private void showNametagToPlayer(Player owner, Player viewer) {
         NametagEntity entity = playerNametags.get(owner.getUniqueId());
         if (entity == null) return;
         int ownerId = owner.getEntityId();
-        int entityId = entity.getEntityId();
 
         try {
             org.bukkit.Location bukkit_location = owner.getLocation().clone();
@@ -187,23 +209,6 @@ public class NametagHandler implements Listener {
                     bukkit_location.getPitch()
             );
 
-            // Create the spawn packet for the text display entity
-            WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
-                    entityId,
-                    UUID.randomUUID(),
-                    EntityTypes.TEXT_DISPLAY,
-                    packetevents_location,
-                    0f, // yaw
-                    0, // data
-                    new Vector3d(0, 0, 0) // velocity
-            );
-
-            // Add metadata to the Text Display, see protocol info here: https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata#Text_Display
-            List<EntityData<?>> metadata = new ArrayList<>();
-
-            // Center the nametag above the player's head and let it follow the surrounding players.
-            metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
-
             float defaultViewDistance = 1.0f; // default (1 unit) equals 64 blocks
             // Tested: Default is 80 for our metadata.
             // Default Minecraft client nametag distance is 64 blocks.
@@ -213,23 +218,61 @@ public class NametagHandler implements Listener {
             int blocksConfig = (int) plugin.config.general.get("view_distance");
             int blocks = blocksConfig > 0 ? blocksConfig : 64; // Default to 64 blocks if not set
 
-            metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, oneBlockViewDistance * blocks));
+            // Configurable line spacing in blocks (world units). Default ~0.275 blocks.
+            Object lineSpacingObj = plugin.config.general.get("line_spacing");
+            double lineSpacing = (lineSpacingObj instanceof Number) ? ((Number) lineSpacingObj).doubleValue() : 0.275D;
 
-            // Set the text content of the text display entity
-            Component text = entity.getText();
-            text = text.appendNewline();
-            metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+            // Create the spawn packet for each text display entity (one per line), bottom-up
+            List<Integer> lineEntityIds = entity.getEntityIds();
+            List<Component> linesBottomUp = entity.getLines(); // bottom-up order
 
-            // Set background color to fully transparent
-            metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
+            for (int i = 0; i < lineEntityIds.size(); i++) {
+                int lineEntityId = lineEntityIds.get(i);
 
-            WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+                WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
+                        lineEntityId,
+                        UUID.randomUUID(),
+                        EntityTypes.TEXT_DISPLAY,
+                        packetevents_location,
+                        0f, // yaw
+                        0,  // data
+                        new Vector3d(0, 0, 0) // velocity
+                );
 
-            WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(ownerId, new int[]{entityId});
+                // Add metadata to the Text Display, see protocol info here: https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata#Text_Display
+                List<EntityData<?>> metadata = new ArrayList<>();
 
-            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
-            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
-            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
+                // Display entity flags: enable transformations + centered billboard so it faces viewers
+                metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
+
+                // View distance
+                metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, oneBlockViewDistance * blocks));
+
+                // Apply per-line vertical translation so lines have spacing while riding each other.
+                // Translation is in world units (blocks). Bottom line = 0, next = spacing, etc.
+                float yOffset = (float) ((i + 1) * lineSpacing);
+                metadata.add(new EntityData<>(11, EntityDataTypes.VECTOR3F, new Vector3f(0f, yOffset, 0f)));
+
+                // Set the text content of this line (each line is its own display)
+                Component lineText = linesBottomUp.get(i);
+                metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, lineText));
+
+                // Set background color to fully transparent (optional)
+                // metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
+
+                WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(lineEntityId, metadata);
+
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+            }
+
+            // Chain passengers: start from the owner, then each line rides the previous one (bottom-up)
+            int parentId = ownerId;
+            for (int lineEntityId : lineEntityIds) {
+                WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(parentId, new int[]{lineEntityId});
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
+                parentId = lineEntityId; // next line rides this line
+            }
         } catch (Exception e) {
             plugin.getLogger().severe("Error showing nametag: " + e.getMessage());
         }
@@ -253,27 +296,50 @@ public class NametagHandler implements Listener {
                     .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
                     .build();
 
-            String nametag = (String) plugin.config.general.get("nametag");
-            Component message = plugin.message.getMessageRaw(nametag, replacements, player);
+            String nametagTemplate = (String) plugin.config.general.get("nametag");
+            List<Component> newLinesBottomUp = renderLinesBottomUp(nametagTemplate, replacements, player);
 
-            if (!entity.getText().equals(message)) {
-                entity.setText(message);
+            // If counts differ, respawn the whole chain for this player (safer)
+            if (entity.getLines().size() != newLinesBottomUp.size()) {
+                entity.setLines(newLinesBottomUp);
+                // Destroy old and respawn new entities for everyone
+                removeNametag(player);
+                spawnNametag(player);
+                continue;
+            }
+
+            // Same count: update changed lines only
+            boolean anyChanged = false;
+            for (int i = 0; i < newLinesBottomUp.size(); i++) {
+                if (!newLinesBottomUp.get(i).equals(entity.getLines().get(i))) {
+                    anyChanged = true;
+                    break;
+                }
+            }
+
+            if (anyChanged) {
+                entity.setLines(newLinesBottomUp);
                 sendNametagTextUpdate(player, entity);
             }
         }
     }
 
     private void sendNametagTextUpdate(Player owner, NametagEntity entity) {
-        int entityId = entity.getEntityId();
-        List<EntityData<?>> metadata = new ArrayList<>();
-        Component text = entity.getText();
-        text = text.appendNewline();
-        metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
-        WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+        List<Integer> ids = entity.getEntityIds();
+        List<Component> lines = entity.getLines();
 
-        for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.equals(owner)) {
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+        // For each line entity, send metadata update for text (index 23)
+        for (int i = 0; i < ids.size(); i++) {
+            int entityId = ids.get(i);
+            List<EntityData<?>> metadata = new ArrayList<>();
+            Component text = lines.get(i);
+            metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+            WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                if (!viewer.equals(owner)) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+                }
             }
         }
     }
@@ -281,11 +347,12 @@ public class NametagHandler implements Listener {
     private void removeNametag(Player player) {
         NametagEntity entity = playerNametags.remove(player.getUniqueId());
         if (entity != null) {
-            int entityId = entity.getEntityId();
-            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
-
-            for (Player viewer : Bukkit.getOnlinePlayers()) {
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+            // Destroy all line entities for this player's nametag
+            for (int entityId : entity.getEntityIds()) {
+                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+                for (Player viewer : Bukkit.getOnlinePlayers()) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+                }
             }
         }
     }
@@ -301,10 +368,12 @@ public class NametagHandler implements Listener {
 
     public void removeAllNametagsOnShutdown() {
         for (Map.Entry<UUID, NametagEntity> entry : playerNametags.entrySet()) {
-            int entityId = entry.getValue().getEntityId();
-            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
-            for (Player viewer : Bukkit.getOnlinePlayers()) {
-                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+            // Destroy all line entities for each nametag
+            for (int entityId : entry.getValue().getEntityIds()) {
+                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+                for (Player viewer : Bukkit.getOnlinePlayers()) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+                }
             }
         }
         playerNametags.clear();
@@ -318,22 +387,24 @@ public class NametagHandler implements Listener {
     }
 
     public static class NametagEntity {
-        private final int entityId;
-        private Component text;
+        private final List<Integer> entityIds; // bottom-up order
+        private List<Component> lines; // bottom-up order
 
-        public NametagEntity(int entityId, Component text) {
-            this.entityId = entityId;
-            this.text = text;
+        public NametagEntity(List<Integer> entityIds, List<Component> lines) {
+            this.entityIds = entityIds;
+            this.lines = lines;
         }
 
-        public int getEntityId() {
-            return entityId;
+        public List<Integer> getEntityIds() {
+            return entityIds;
         }
-        public Component getText() {
-            return text;
+
+        public List<Component> getLines() {
+            return lines;
         }
-        public void setText(Component text) {
-            this.text = text;
+
+        public void setLines(List<Component> lines) {
+            this.lines = lines;
         }
     }
 }
