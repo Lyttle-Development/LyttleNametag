@@ -74,11 +74,11 @@ public class NametagHandler implements Listener {
         if (hardReloadTimer != null) {
             hardReloadTimer.cancel();
         }
-        // Hard reload every 60 seconds (1 minute)
+        // Soft refresh every 60 seconds (1 minute) without destroying/spawning to avoid flicker
         this.hardReloadTimer = new BukkitRunnable() {
             @Override
             public void run() {
-                reloadNametags();
+                softRefreshNametags();
             }
         }.runTaskTimer(plugin, 0, 20 * 60); // 20 ticks per second * 60 seconds
     }
@@ -89,6 +89,15 @@ public class NametagHandler implements Listener {
             spawnNametag(event.getPlayer());
             for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                 if (onlinePlayer.equals(event.getPlayer())) continue;
+                // Only show nametags of players in the same world as the joining player
+                if (!sameWorld(onlinePlayer, event.getPlayer())) {
+                    // Ensure any previously visible cross-world displays are destroyed for the joining viewer
+                    NametagEntity e = playerNametags.get(onlinePlayer.getUniqueId());
+                    if (e != null) {
+                        sendDestroyToViewer(event.getPlayer(), e.getEntityIds());
+                    }
+                    continue;
+                }
                 showNametagToPlayer(onlinePlayer, event.getPlayer());
             }
         }, 10L);
@@ -181,7 +190,13 @@ public class NametagHandler implements Listener {
 
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (!viewer.equals(player)) {
-                showNametagToPlayer(player, viewer);
+                // Only show to viewers in the same world
+                if (sameWorld(player, viewer)) {
+                    showNametagToPlayer(player, viewer);
+                } else {
+                    // Ensure it's hidden in other worlds
+                    sendDestroyToViewer(viewer, nametagEntity.getEntityIds());
+                }
             }
         }
 
@@ -208,6 +223,13 @@ public class NametagHandler implements Listener {
     private void showNametagToPlayer(Player owner, Player viewer) {
         NametagEntity entity = playerNametags.get(owner.getUniqueId());
         if (entity == null) return;
+
+        // Only show if owner and viewer are in the same world; otherwise ensure it's destroyed for this viewer
+        if (!sameWorld(owner, viewer)) {
+            sendDestroyToViewer(viewer, entity.getEntityIds());
+            return;
+        }
+
         int ownerId = owner.getEntityId();
 
         try {
@@ -383,6 +405,40 @@ public class NametagHandler implements Listener {
         sendNametagTextUpdate(player, entity);
     }
 
+    // Non-destructive periodic refresh: re-apply text state and passenger chains without destroy/spawn.
+    private void softRefreshNametags() {
+        cleanupOrphans();
+        for (Player owner : Bukkit.getOnlinePlayers()) {
+            NametagEntity entity = playerNametags.get(owner.getUniqueId());
+            if (entity == null) {
+                // If somehow missing, spawn anew (rare). This will only affect that player’s nametag.
+                spawnNametag(owner);
+                continue;
+            }
+            // Re-apply current sneak state instantly (metadata only)
+            updateSneakStateNametag(owner, owner.isSneaking());
+            // Re-send passenger chain to ensure client keeps the riding hierarchy, scoped per-world
+            resendPassengerChain(owner, entity);
+        }
+    }
+
+    private void resendPassengerChain(Player owner, NametagEntity entity) {
+        int parentId = owner.getEntityId();
+        for (int lineEntityId : entity.getEntityIds()) {
+            WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(parentId, new int[]{lineEntityId});
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                if (viewer.equals(owner)) continue;
+                if (sameWorld(owner, viewer)) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
+                } else {
+                    // Ensure hidden in other worlds
+                    sendDestroyToViewer(viewer, entity.getEntityIds());
+                }
+            }
+            parentId = lineEntityId;
+        }
+    }
+
     private List<Component> normalizeToSize(List<Component> src, int size) {
         List<Component> out = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
@@ -420,11 +476,26 @@ public class NametagHandler implements Listener {
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
 
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (!viewer.equals(owner)) {
+                if (viewer.equals(owner)) continue;
+                if (sameWorld(owner, viewer)) {
                     PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+                } else {
+                    // If viewer is in a different world, ensure the nametag is destroyed for them
+                    sendDestroyToViewer(viewer, ids);
                 }
             }
         }
+    }
+
+    private void sendDestroyToViewer(Player viewer, List<Integer> entityIds) {
+        for (int entityId : entityIds) {
+            WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+        }
+    }
+
+    private boolean sameWorld(Player a, Player b) {
+        return a.getWorld().getUID().equals(b.getWorld().getUID());
     }
 
     private void removeNametag(Player player) {
