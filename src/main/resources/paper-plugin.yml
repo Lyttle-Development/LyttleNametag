@@ -1,0 +1,41 @@
+name: LyttleNametag
+description: Custom nametags plugin
+version: ${version}
+main: com.lyttledev.lyttlenametag.LyttleNametag
+api-version: '1.21'
+authors:
+  - LyttleDevelopment
+  - ThatsATim
+  - Stualyttle
+
+dependencies:
+    server:
+      PlaceholderAPI:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      # Needed for Packet Events compatibility:
+      ProtocolLib:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      ProtocolSupport:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      ViaVersion:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      ViaBackwards:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      ViaRewind:
+        load: BEFORE
+        required: false
+        join-classpath: true
+      Geyser-Spigot:
+        load: BEFORE
+        required: false
+        join-classpath: true
