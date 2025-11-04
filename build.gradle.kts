@@ -6,7 +6,7 @@ plugins {
     `java-library`
     `maven-publish`
     id("io.papermc.hangar-publish-plugin") version "0.1.2"
-    id("com.gradleup.shadow") version "8.3.6"
+    id("com.gradleup.shadow") version "9.2.2"
     id("com.modrinth.minotaur") version "2.+"
 }
 
@@ -32,7 +32,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:" + (property("paperVersion") as String) + "-R0.1-SNAPSHOT")
     compileOnly("me.clip:placeholderapi:2.11.6")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.9.4")
+    implementation("com.github.retrooper:packetevents-spigot:2.9.5")
     implementation("com.lyttledev:lyttleutils:1.2.0")
 }
 
@@ -44,10 +44,12 @@ java.sourceCompatibility = JavaVersion.VERSION_21
 // --- Shadow JAR configuration ---
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    configurations = listOf(project.configurations.runtimeClasspath.get())
-    dependencies {
-        include(dependency("com.lyttledev:lyttleutils"))
-    }
+
+    // Shade everything on runtime classpath; do not restrict with include filters
+    // Relocate both possible base packages used by PacketEvents across versions
+    relocate("com.github.retrooper.packetevents", "com.lyttledev.shaded.packetevents")
+    relocate("io.github.retrooper.packetevents", "com.lyttledev.shaded.packetevents")
+    minimize() // Minimize to reduce jar size
 }
 
 // Disable regular jar to prevent accidental use
@@ -95,6 +97,13 @@ val copyContents by tasks.registering(Copy::class) {
 tasks.named("processResources") {
     dependsOn(copyContents)
 }
+
+tasks.processResources {
+    filesMatching("paper-plugin.yml") {
+        expand(project.properties)
+    }
+}
+
 tasks.named("build") {
     dependsOn(copyContents)
 }
@@ -192,5 +201,5 @@ modrinth {
             else -> "alpha"
         }
     )
-    loaders.set(listOf("paper")) // Or add "spigot", "bukkit" etc as appropriate
+    loaders.set(listOf("paper"))
 }
