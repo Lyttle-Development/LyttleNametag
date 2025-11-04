@@ -10,6 +10,10 @@ import com.lyttledev.lyttleutils.utils.communication.Message;
 import com.lyttledev.lyttleutils.utils.storage.GlobalConfig;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import com.github.retrooper.packetevents.settings.PacketEventsSettings;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -42,11 +46,19 @@ public final class LyttleNametag extends JavaPlugin {
         this.console = new Console(this);
         this.message = new Message(this, config.messages, global);
 
-        // Commands
-        new LyttleNametagCommand(this);
+        // Register commands
+        LifecycleEventManager<Plugin> manager = this.getLifecycleManager();
+        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
+            final Commands commands = event.registrar();
+            this.registerCommands(commands);
+        });
 
         // Handlers
         this.nametagHandler = new NametagHandler(this);
+    }
+
+    public void registerCommands(Commands commands) {
+        LyttleNametagCommand.createCommand(this, commands);
     }
 
     private void initPacketEvents() {
