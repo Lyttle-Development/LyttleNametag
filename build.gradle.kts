@@ -32,8 +32,8 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:" + (property("paperVersion") as String) + "-R0.1-SNAPSHOT")
     compileOnly("me.clip:placeholderapi:2.11.6")
-    implementation("com.github.retrooper:packetevents-spigot:2.9.5")
-    implementation("com.lyttledev:lyttleutils:1.2.0")
+    implementation("com.github.retrooper:packetevents-spigot:2.12.0")
+    implementation("com.lyttledev:lyttleutils:1.2.1")
 }
 
 group = "com.lyttledev"
