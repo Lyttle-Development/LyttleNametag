@@ -21,9 +21,11 @@
 </p>
 
 ### 🎯 Core Plugin Features
-- Multi line nametags
-- Colors & formatting support
-- PlaceholderAPI integration
+- **Multi line nametags**: Display stacked, gorgeous lines above players.
+- **Self-Viewing**: Allow players to see their own nametag (configurable, requires permission or OP status).
+- **Tamed Mobs Support**: Render gorgeous, dynamic double-line floating nametags over tamed pets (wolves, cats, horses). Line 1 displays the owner's prefix/Vault group style; Line 2 displays the pet's custom name (in clean, pristine white text).
+- **Colors & formatting support**: Full legacy/minimessage support.
+- **PlaceholderAPI integration**: Display dynamic server, player, and system placeholders seamlessly.
 
 ---
 
@@ -50,6 +52,7 @@
 | Permission Node       | Description                  | Default |
 |:----------------------|:-----------------------------|:--------|
 | `LyttleNametag.LyttleNametag` | Ability to reload the plugin | `❌`     |
+| `lyttlenametag.viewself` | Ability to view own nametag if enabled | `OP`   |
 
 ---
 
@@ -81,7 +84,14 @@
 
 ### 📝 Configuration Files
 #### 🔧 `config.yml`
-The main configuration file controlling plugin behavior and features.
+The main configuration file controlling plugin behavior and features. Key settings include:
+- `nametag`: The default multi-line template for player nametags.
+- `view_distance`: Maximum block distance within which the nametag is spawned/updated.
+- `view_self`: (boolean, default `true`) Toggle whether players can see their own nametag. Requires OP or `lyttlenametag.viewself` permission.
+- `groups`: Primarily used to override multi-line templates based on the player's primary Vault group (e.g., `admin`).
+- `tamed_mobs`: Dynamic double-line floating nametag configuration for tamed pets:
+  - `enabled`: (boolean, default `true`) Enable the feature.
+  - `show_unnamed`: (boolean, default `false`) Render nametags even if the pet doesn't have a custom name (displays capitalized entity type, e.g. "Wolf").
 
 #### 💬 `messages.yml`
 Customize all plugin messages. Supports color codes and placeholders.
