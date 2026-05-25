@@ -1,0 +1,4 @@
+name: LyttleNametag
+version: ${projectVersion}
+main: com.lyttledev.lyttlenametag.LyttleNametag
+api-version: '1.21'

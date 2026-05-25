@@ -37,6 +37,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class NametagHandler implements Listener {
     private final LyttleNametag plugin;
     private final Map<UUID, NametagEntity> playerNametags = new ConcurrentHashMap<>();
+    private final Map<UUID, TamedMobNametag> tamedMobNametags = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> originalCustomNameVisible = new ConcurrentHashMap<>();
     private final AtomicInteger entityIdCounter = new AtomicInteger(Integer.MAX_VALUE / 2);
     private BukkitTask timer;
     private BukkitTask hardReloadTimer;
@@ -74,6 +76,7 @@ public class NametagHandler implements Listener {
                 // Enforce viewer visibility each cycle to catch vanish changes even if lines didn't change
                 enforceVisibilityMatrix();
                 updateNametagTexts();
+                updateTamedMobsNametags();
             }
         }.runTaskTimer(plugin, 0, Math.round(interval * 20));
     }
@@ -212,7 +215,7 @@ public class NametagHandler implements Listener {
 
         // Render the nametag template into separate lines and chain them bottom-up (each line rides the previous one).
         // NOTE: We always allocate the full template line count to avoid re-spawn flicker on visibility toggles.
-        String nametagTemplate = (String) plugin.config.general.get("nametag");
+        String nametagTemplate = getPlayerNametagTemplate(player);
         List<Component> linesBottomUp = renderLinesBottomUp(nametagTemplate, replacements, player);
 
         // Create entity IDs for each line (one Text Display per line)
@@ -229,16 +232,19 @@ public class NametagHandler implements Listener {
         playerNametags.put(player.getUniqueId(), nametagEntity);
 
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.equals(player)) {
-                // Only show to viewers in the same world who can see the player (not vanished for them)
-                if (!shouldHideForViewer(player, viewer)) {
-                    showNametagToPlayer(player, viewer);
-                    setLastVisibility(viewer, player, true);
-                } else {
-                    // Ensure it's hidden for non-eligible viewers
-                    sendDestroyToViewer(viewer, nametagEntity.getEntityIds());
-                    setLastVisibility(viewer, player, false);
-                }
+            if (viewer.equals(player) && !canViewSelf(player)) {
+                sendDestroyToViewer(viewer, nametagEntity.getEntityIds());
+                setLastVisibility(viewer, player, false);
+                continue;
+            }
+            // Only show to viewers in the same world who can see the player (not vanished for them)
+            if (!shouldHideForViewer(player, viewer)) {
+                showNametagToPlayer(player, viewer);
+                setLastVisibility(viewer, player, true);
+            } else {
+                // Ensure it's hidden for non-eligible viewers
+                sendDestroyToViewer(viewer, nametagEntity.getEntityIds());
+                setLastVisibility(viewer, player, false);
             }
         }
 
@@ -386,7 +392,7 @@ public class NametagHandler implements Listener {
             if (isGloballyHidden(player)) {
                 newLinesBottomUp = emptyLines(entity.getEntityIds().size());
             } else {
-                String nametagTemplate = (String) plugin.config.general.get("nametag");
+                String nametagTemplate = getPlayerNametagTemplate(player);
                 List<Component> rendered = renderLinesBottomUp(nametagTemplate, replacements, player);
                 // Normalize to the current entity count to avoid destroy/spawn
                 newLinesBottomUp = normalizeToSize(rendered, entity.getEntityIds().size());
@@ -435,7 +441,7 @@ public class NametagHandler implements Listener {
                     .add("<Z>", String.valueOf(baseLoc.getBlockZ()))
                     .build();
 
-            String nametagTemplate = (String) plugin.config.general.get("nametag");
+            String nametagTemplate = getPlayerNametagTemplate(player);
             List<Component> rendered = renderLinesBottomUp(nametagTemplate, replacements, player);
             target = normalizeToSize(rendered, entity.getEntityIds().size());
         }
@@ -484,7 +490,13 @@ public class NametagHandler implements Listener {
             List<Integer> ids = entity.getEntityIds();
 
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (viewer.getUniqueId().equals(ownerId)) continue;
+                if (viewer.getUniqueId().equals(ownerId) && !canViewSelf(owner)) {
+                    if (getLastVisibility(viewer, owner)) {
+                        sendDestroyToViewer(viewer, ids);
+                        setLastVisibility(viewer, owner, false);
+                    }
+                    continue;
+                }
 
                 boolean desiredVisible = !shouldHideForViewer(owner, viewer);
                 boolean lastVisible = getLastVisibility(viewer, owner);
@@ -507,7 +519,7 @@ public class NametagHandler implements Listener {
         for (int lineEntityId : entity.getEntityIds()) {
             WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(parentId, new int[]{lineEntityId});
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (viewer.equals(owner)) continue;
+                if (viewer.equals(owner) && !canViewSelf(owner)) continue;
                 if (!shouldHideForViewer(owner, viewer)) {
                     PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
                 } else {
@@ -597,7 +609,7 @@ public class NametagHandler implements Listener {
             WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
 
             for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (viewer.equals(owner)) continue;
+                if (viewer.equals(owner) && !canViewSelf(owner)) continue;
                 if (!shouldHideForViewer(owner, viewer)) {
                     PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
                 } else {
@@ -650,6 +662,7 @@ public class NametagHandler implements Listener {
     }
 
     public void removeAllNametagsOnShutdown() {
+        removeAllTamedMobNametags();
         for (Map.Entry<UUID, NametagEntity> entry : playerNametags.entrySet()) {
             // Destroy all line entities for each nametag
             for (int entityId : entry.getValue().getEntityIds()) {
@@ -670,6 +683,335 @@ public class NametagHandler implements Listener {
         }
     }
 
+    private String getPlayerNametagTemplate(Player player) {
+        var vaultPerms = plugin.getVaultPermission();
+        if (vaultPerms != null && vaultPerms.hasGroupSupport()) {
+            try {
+                String primaryGroup = vaultPerms.getPrimaryGroup(player);
+                if (primaryGroup != null) {
+                    String groupTemplate = plugin.config.getGroupNametag(primaryGroup);
+                    if (groupTemplate != null) {
+                        return groupTemplate;
+                    }
+                }
+            } catch (Exception e) {
+                // Fail-safe dynamic fallback if Vault throws
+            }
+        }
+        return (String) plugin.config.general.get("nametag");
+    }
+
+    private boolean canViewSelf(Player player) {
+        if (!plugin.config.general.contains("view_self")) return false;
+        Object val = plugin.config.general.get("view_self");
+        if (val instanceof Boolean && (Boolean) val) {
+            return player.isOp() || player.hasPermission("lyttlenametag.viewself");
+        }
+        return false;
+    }
+
+    @EventHandler
+    public void onChunkUnload(org.bukkit.event.world.ChunkUnloadEvent event) {
+        for (org.bukkit.entity.Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof org.bukkit.entity.Tameable) {
+                removeTamedMobNametag(entity.getUniqueId());
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntityDeath(org.bukkit.event.entity.EntityDeathEvent event) {
+        if (event.getEntity() instanceof org.bukkit.entity.Tameable) {
+            removeTamedMobNametag(event.getEntity().getUniqueId());
+        }
+    }
+
+    private boolean isTamedMobsEnabled() {
+        if (plugin.config.general == null) return false;
+        String path = "tamed_mobs.enabled";
+        if (plugin.config.general.contains(path)) {
+            Object val = plugin.config.general.get(path);
+            return val instanceof Boolean && (Boolean) val;
+        }
+        return false;
+    }
+
+    private boolean isTamedMobsShowUnnamed() {
+        if (plugin.config.general == null) return false;
+        String path = "tamed_mobs.show_unnamed";
+        if (plugin.config.general.contains(path)) {
+            Object val = plugin.config.general.get(path);
+            return val instanceof Boolean && (Boolean) val;
+        }
+        return false;
+    }
+
+    private void updateTamedMobsNametags() {
+        if (!isTamedMobsEnabled()) {
+            removeAllTamedMobNametags();
+            return;
+        }
+
+        boolean showUnnamed = isTamedMobsShowUnnamed();
+        List<UUID> activeMobUuids = new ArrayList<>();
+
+        for (World world : Bukkit.getWorlds()) {
+            for (org.bukkit.entity.Tameable tameable : world.getEntitiesByClass(org.bukkit.entity.Tameable.class)) {
+                if (!tameable.isTamed()) continue;
+
+                String customName = tameable.getCustomName();
+                boolean hasCustomName = (customName != null && !customName.trim().isEmpty());
+                if (!hasCustomName && !showUnnamed) {
+                    removeTamedMobNametag(tameable.getUniqueId());
+                    continue;
+                }
+
+                UUID mobUuid = tameable.getUniqueId();
+                activeMobUuids.add(mobUuid);
+
+                org.bukkit.entity.AnimalTamer tamer = tameable.getOwner();
+                UUID ownerUuid = tamer != null ? tamer.getUniqueId() : null;
+                String ownerName = tamer != null ? tamer.getName() : null;
+                if (ownerName == null && ownerUuid != null) {
+                    ownerName = Bukkit.getOfflinePlayer(ownerUuid).getName();
+                }
+                if (ownerName == null) {
+                    ownerName = "Owner";
+                }
+
+                TamedMobNametag mobNametag = tamedMobNametags.get(mobUuid);
+
+                if (tameable.isCustomNameVisible()) {
+                    originalCustomNameVisible.put(mobUuid, true);
+                    tameable.setCustomNameVisible(false);
+                } else if (hasCustomName && !originalCustomNameVisible.containsKey(mobUuid)) {
+                    originalCustomNameVisible.put(mobUuid, true);
+                    tameable.setCustomNameVisible(false);
+                }
+
+                String ownerFirstLineTemplate = getOwnerFirstLineTemplate(ownerUuid, ownerName);
+
+                Player ownerOnline = ownerUuid != null ? Bukkit.getPlayer(ownerUuid) : null;
+                Replacements replacements = Replacements.builder()
+                        .add("<PLAYER>", ownerName)
+                        .add("<WORLD>", world.getName())
+                        .add("<X>", String.valueOf(tameable.getLocation().getBlockX()))
+                        .add("<Y>", String.valueOf(tameable.getLocation().getBlockY()))
+                        .add("<Z>", String.valueOf(tameable.getLocation().getBlockZ()))
+                        .build();
+
+                Component firstLine = plugin.message.getMessageRaw(ownerFirstLineTemplate, replacements, ownerOnline);
+
+                String animalNameText;
+                if (hasCustomName) {
+                    animalNameText = net.md_5.bungee.api.ChatColor.stripColor(customName);
+                } else {
+                    String typeName = tameable.getType().name().toLowerCase();
+                    animalNameText = typeName.substring(0, 1).toUpperCase() + typeName.substring(1);
+                }
+                Component secondLine = Component.text(animalNameText, net.kyori.adventure.text.format.NamedTextColor.WHITE);
+
+                List<Component> linesBottomUp = new ArrayList<>();
+                linesBottomUp.add(secondLine);
+                linesBottomUp.add(firstLine);
+
+                if (mobNametag == null) {
+                    List<Integer> entityIds = new ArrayList<>();
+                    entityIds.add(entityIdCounter.decrementAndGet());
+                    entityIds.add(entityIdCounter.decrementAndGet());
+
+                    TamedMobNametag newNametag = new TamedMobNametag(mobUuid, entityIds, linesBottomUp);
+                    tamedMobNametags.put(mobUuid, newNametag);
+
+                    for (Player viewer : Bukkit.getOnlinePlayers()) {
+                        if (shouldHideMobForViewer(tameable, viewer)) continue;
+                        showTamedMobNametagToPlayer(tameable, newNametag, viewer);
+                    }
+                } else {
+                    boolean changed = false;
+                    List<Component> oldLines = mobNametag.getLines();
+                    if (oldLines.size() == linesBottomUp.size()) {
+                        for (int i = 0; i < oldLines.size(); i++) {
+                            if (!oldLines.get(i).equals(linesBottomUp.get(i))) {
+                                changed = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        changed = true;
+                    }
+
+                    if (changed) {
+                        mobNametag.setLines(linesBottomUp);
+                        sendTamedMobNametagTextUpdate(tameable, mobNametag);
+                    }
+                }
+            }
+        }
+
+        for (UUID uuid : new ArrayList<>(tamedMobNametags.keySet())) {
+            if (!activeMobUuids.contains(uuid)) {
+                removeTamedMobNametag(uuid);
+            }
+        }
+    }
+
+    private String getOwnerFirstLineTemplate(UUID ownerUuid, String ownerName) {
+        String template = null;
+        Player owner = ownerUuid != null ? Bukkit.getPlayer(ownerUuid) : null;
+        if (owner != null && owner.isOnline()) {
+            template = getPlayerNametagTemplate(owner);
+        } else {
+            template = (String) plugin.config.general.get("nametag");
+        }
+        if (template != null) {
+            String[] lines = template.split("\\R", -1);
+            if (lines.length > 0) {
+                return lines[0];
+            }
+        }
+        return "<gray>" + ownerName + "</gray>";
+    }
+
+    private boolean shouldHideMobForViewer(org.bukkit.entity.Tameable tameable, Player viewer) {
+        return !tameable.getWorld().getUID().equals(viewer.getWorld().getUID());
+    }
+
+    private void showTamedMobNametagToPlayer(org.bukkit.entity.Tameable tameable, TamedMobNametag entity, Player viewer) {
+        int animalId = tameable.getEntityId();
+        List<Integer> lineEntityIds = entity.getEntityIds();
+        List<Component> linesBottomUp = entity.getLines();
+
+        try {
+            org.bukkit.Location bukkit_location = tameable.getLocation().clone();
+            double mobHeight = tameable.getHeight();
+            bukkit_location.setY(bukkit_location.getY() + mobHeight);
+
+            Location packetevents_location = new Location(
+                    bukkit_location.getX(),
+                    bukkit_location.getY(),
+                    bukkit_location.getZ(),
+                    bukkit_location.getYaw(),
+                    bukkit_location.getPitch()
+            );
+
+            float defaultViewDistance = 1.0f;
+            float blocksPerDefault = 80.0f;
+            float oneBlockViewDistance = defaultViewDistance / blocksPerDefault;
+
+            int blocksConfig = (int) plugin.config.general.get("view_distance");
+            int blocks = blocksConfig > 0 ? blocksConfig : 64;
+
+            Object lineSpacingObj = plugin.config.general.get("line_spacing");
+            double lineSpacing = (lineSpacingObj instanceof Number) ? ((Number) lineSpacingObj).doubleValue() : 0.275D;
+
+            for (int i = 0; i < lineEntityIds.size(); i++) {
+                int lineEntityId = lineEntityIds.get(i);
+
+                WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
+                        lineEntityId,
+                        UUID.randomUUID(),
+                        EntityTypes.TEXT_DISPLAY,
+                        packetevents_location,
+                        0f,
+                        0,
+                        new Vector3d(0, 0, 0)
+                );
+
+                List<EntityData<?>> metadata = new ArrayList<>();
+                metadata.add(new EntityData<>(15, EntityDataTypes.BYTE, (byte) 0x03));
+                metadata.add(new EntityData<>(17, EntityDataTypes.FLOAT, oneBlockViewDistance * blocks));
+
+                float yOffset = (float) (i * lineSpacing);
+                float baseRideOffset = (float) (mobHeight * 0.4f);
+                metadata.add(new EntityData<>(11, EntityDataTypes.VECTOR3F, new Vector3f(0f, baseRideOffset + yOffset, 0f)));
+
+                Component lineText = linesBottomUp.get(i);
+                metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, lineText));
+
+                WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(lineEntityId, metadata);
+
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, spawnPacket);
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+            }
+
+            int parentId = animalId;
+            for (int lineEntityId : lineEntityIds) {
+                WrapperPlayServerSetPassengers passengersPacket = new WrapperPlayServerSetPassengers(parentId, new int[]{lineEntityId});
+                PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, passengersPacket);
+                parentId = lineEntityId;
+            }
+
+            List<EntityData<?>> mobMetadata = new ArrayList<>();
+            mobMetadata.add(new EntityData<>(3, EntityDataTypes.BOOLEAN, false));
+            WrapperPlayServerEntityMetadata mobMetadataPacket = new WrapperPlayServerEntityMetadata(animalId, mobMetadata);
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, mobMetadataPacket);
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error showing tamed mob nametag: " + e.getMessage());
+        }
+    }
+
+    private void sendTamedMobNametagTextUpdate(org.bukkit.entity.Tameable tameable, TamedMobNametag entity) {
+        List<Integer> ids = entity.getEntityIds();
+        List<Component> lines = entity.getLines();
+
+        for (int i = 0; i < ids.size(); i++) {
+            int entityId = ids.get(i);
+            List<EntityData<?>> metadata = new ArrayList<>();
+            Component text = lines.get(i);
+            metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, text));
+            WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(entityId, metadata);
+
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                if (!shouldHideMobForViewer(tameable, viewer)) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, metadataPacket);
+                }
+            }
+        }
+    }
+
+    private void removeTamedMobNametag(UUID mobUuid) {
+        TamedMobNametag entity = tamedMobNametags.remove(mobUuid);
+        if (entity != null) {
+            for (int entityId : entity.getEntityIds()) {
+                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+                for (Player viewer : Bukkit.getOnlinePlayers()) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+                }
+            }
+        }
+
+        Boolean originalVisible = originalCustomNameVisible.remove(mobUuid);
+        if (originalVisible != null && originalVisible) {
+            org.bukkit.entity.Entity mob = Bukkit.getEntity(mobUuid);
+            if (mob instanceof org.bukkit.entity.Tameable) {
+                ((org.bukkit.entity.Tameable) mob).setCustomNameVisible(true);
+            }
+        }
+    }
+
+    private void removeAllTamedMobNametags() {
+        for (Map.Entry<UUID, TamedMobNametag> entry : tamedMobNametags.entrySet()) {
+            for (int entityId : entry.getValue().getEntityIds()) {
+                WrapperPlayServerDestroyEntities destroyPacket = new WrapperPlayServerDestroyEntities(entityId);
+                for (Player viewer : Bukkit.getOnlinePlayers()) {
+                    PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, destroyPacket);
+                }
+            }
+            UUID mobUuid = entry.getKey();
+            Boolean originalVisible = originalCustomNameVisible.remove(mobUuid);
+            if (originalVisible != null && originalVisible) {
+                org.bukkit.entity.Entity mob = Bukkit.getEntity(mobUuid);
+                if (mob instanceof org.bukkit.entity.Tameable) {
+                    ((org.bukkit.entity.Tameable) mob).setCustomNameVisible(true);
+                }
+            }
+        }
+        tamedMobNametags.clear();
+        originalCustomNameVisible.clear();
+    }
+
     public static class NametagEntity {
         private final List<Integer> entityIds; // bottom-up order
         private List<Component> lines; // bottom-up order
@@ -677,6 +1019,34 @@ public class NametagHandler implements Listener {
         public NametagEntity(List<Integer> entityIds, List<Component> lines) {
             this.entityIds = entityIds;
             this.lines = lines;
+        }
+
+        public List<Integer> getEntityIds() {
+            return entityIds;
+        }
+
+        public List<Component> getLines() {
+            return lines;
+        }
+
+        public void setLines(List<Component> lines) {
+            this.lines = lines;
+        }
+    }
+
+    public static class TamedMobNametag {
+        private final UUID entityUuid;
+        private final List<Integer> entityIds; // bottom-up order
+        private List<Component> lines; // bottom-up order
+
+        public TamedMobNametag(UUID entityUuid, List<Integer> entityIds, List<Component> lines) {
+            this.entityUuid = entityUuid;
+            this.entityIds = entityIds;
+            this.lines = lines;
+        }
+
+        public UUID getEntityUuid() {
+            return entityUuid;
         }
 
         public List<Integer> getEntityIds() {

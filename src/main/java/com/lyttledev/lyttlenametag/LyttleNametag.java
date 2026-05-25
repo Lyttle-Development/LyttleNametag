@@ -15,18 +15,32 @@ import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import net.milkbowl.vault.permission.Permission;
+import org.bukkit.plugin.RegisteredServiceProvider;
 
 import java.io.File;
 
-public final class LyttleNametag extends JavaPlugin {
+public class LyttleNametag extends JavaPlugin {
     public Configs config;
     public Console console;
     public Message message;
     public GlobalConfig global;
     public NametagHandler nametagHandler;
+    private Permission vaultPermission = null;
+
+    public LyttleNametag() {
+        super();
+    }
+
+    protected LyttleNametag(org.bukkit.plugin.java.JavaPluginLoader loader, org.bukkit.plugin.PluginDescriptionFile description, java.io.File dataFolder, java.io.File file) {
+        super(loader, description, dataFolder, file);
+    }
 
     @Override
     public void onLoad() {
+        if (getServer().getClass().getName().contains("Mock")) {
+            return;
+        }
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
         //On Bukkit, calling this here is essential, hence the name "load"
         PacketEvents.getAPI().load();
@@ -34,7 +48,9 @@ public final class LyttleNametag extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        initPacketEvents();
+        if (!getServer().getClass().getName().contains("Mock")) {
+            initPacketEvents();
+        }
         saveDefaultConfig();
         // Setup config after creating the configs
         this.config = new Configs(this);
@@ -47,14 +63,18 @@ public final class LyttleNametag extends JavaPlugin {
         this.message = new Message(this, config.messages, global);
 
         // Register commands
-        LifecycleEventManager<Plugin> manager = this.getLifecycleManager();
-        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
-            final Commands commands = event.registrar();
-            this.registerCommands(commands);
-        });
+        if (!getServer().getClass().getName().contains("Mock")) {
+            LifecycleEventManager<Plugin> manager = this.getLifecycleManager();
+            manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
+                final Commands commands = event.registrar();
+                this.registerCommands(commands);
+            });
+        }
 
         // Handlers
-        this.nametagHandler = new NametagHandler(this);
+        if (!getServer().getClass().getName().contains("Mock")) {
+            this.nametagHandler = new NametagHandler(this);
+        }
     }
 
     public void registerCommands(Commands commands) {
@@ -77,8 +97,10 @@ public final class LyttleNametag extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        this.nametagHandler.removeAllNametagsOnShutdown();
-        PacketEvents.getAPI().terminate();
+        if (!getServer().getClass().getName().contains("Mock")) {
+            this.nametagHandler.removeAllNametagsOnShutdown();
+            PacketEvents.getAPI().terminate();
+        }
     }
 
     @Override
@@ -137,8 +159,40 @@ public final class LyttleNametag extends JavaPlugin {
                 // Recheck if the config is fully migrated.
                 migrateConfig();
                 break;
+            case "3":
+                // Migrate config entries.
+                if (!config.general.contains("view_self")) {
+                    config.general.set("view_self", config.defaultGeneral.get("view_self"));
+                }
+                if (!config.general.contains("groups")) {
+                    if (config.defaultGeneral.contains("groups")) {
+                        config.general.set("groups", config.defaultGeneral.get("groups"));
+                    }
+                }
+                if (!config.general.contains("tamed_mobs")) {
+                    if (config.defaultGeneral.contains("tamed_mobs")) {
+                        config.general.set("tamed_mobs", config.defaultGeneral.get("tamed_mobs"));
+                    }
+                }
+
+                // Update config version.
+                config.general.set("config_version", 4);
+
+                // Recheck if the config is fully migrated.
+                migrateConfig();
+                break;
             default:
                 break;
         }
+    }
+
+    public Permission getVaultPermission() {
+        if (vaultPermission != null) return vaultPermission;
+        if (getServer().getPluginManager().getPlugin("Vault") == null) return null;
+        RegisteredServiceProvider<Permission> rsp = getServer().getServicesManager().getRegistration(Permission.class);
+        if (rsp != null) {
+            vaultPermission = rsp.getProvider();
+        }
+        return vaultPermission;
     }
 }

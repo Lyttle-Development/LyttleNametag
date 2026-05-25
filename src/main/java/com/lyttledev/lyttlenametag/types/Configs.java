@@ -37,4 +37,14 @@ public class Configs {
     private String getConfigPath(String path) {
         return plugin.getConfig().getString("configs." + path);
     }
+
+    public String getGroupNametag(String groupName) {
+        if (general == null || groupName == null) return null;
+        String path = "groups." + groupName.toLowerCase();
+        if (general.contains(path)) {
+            Object val = general.get(path);
+            return val != null ? val.toString() : null;
+        }
+        return null;
+    }
 }
