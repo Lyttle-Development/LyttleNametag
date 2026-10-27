@@ -339,8 +339,14 @@ public class NametagHandler implements Listener {
                 }
                 metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, lineText));
 
-                // Set background color to fully transparent (optional)
-                // metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
+                byte styleFlags = getConfigBoolean("see_through_blocks", true) ? (byte) 0x02 : 0;
+                metadata.add(new EntityData<>(27, EntityDataTypes.BYTE, styleFlags));
+
+                int textOpacity = Math.round(getOpacityPercent("text_opacity", 100) * 255f / 100f);
+                metadata.add(new EntityData<>(26, EntityDataTypes.BYTE, (byte) textOpacity));
+
+                int backgroundOpacity = Math.round(getOpacityPercent("background_opacity", 0) * 255f / 100f);
+                metadata.add(new EntityData<>(25, EntityDataTypes.INT, backgroundOpacity << 24));
 
                 WrapperPlayServerEntityMetadata metadataPacket = new WrapperPlayServerEntityMetadata(lineEntityId, metadata);
 
@@ -521,10 +527,22 @@ public class NametagHandler implements Listener {
     }
 
     private boolean isGloballyHidden(Player owner) {
-        // Hide nametag when sneaking or invisible via potion/flag
-        return owner.isSneaking()
+        return (getConfigBoolean("hide_when_sneaking", true) && owner.isSneaking())
                 || owner.hasPotionEffect(PotionEffectType.INVISIBILITY)
                 || owner.isInvisible();
+    }
+
+    private boolean getConfigBoolean(String key, boolean defaultValue) {
+        Object value = plugin.config.general.get(key);
+        return value instanceof Boolean ? (Boolean) value : defaultValue;
+    }
+
+    private int getOpacityPercent(String key, int defaultValue) {
+        Object value = plugin.config.general.get(key);
+        if (!(value instanceof Number)) {
+            return defaultValue;
+        }
+        return Math.max(0, Math.min(100, ((Number) value).intValue()));
     }
 
     private boolean shouldHideForViewer(Player owner, Player viewer) {
