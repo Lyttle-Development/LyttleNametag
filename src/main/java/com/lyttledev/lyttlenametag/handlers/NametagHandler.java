@@ -339,8 +339,8 @@ public class NametagHandler implements Listener {
                 }
                 metadata.add(new EntityData<>(23, EntityDataTypes.ADV_COMPONENT, lineText));
 
-                // Keep text occluded by blocks; the see-through style flag is bit 1.
-                metadata.add(new EntityData<>(27, EntityDataTypes.BYTE, (byte) 0x00));
+                // Enable the see-through style flag so nametags remain visible behind blocks.
+                metadata.add(new EntityData<>(27, EntityDataTypes.BYTE, (byte) 0x02));
 
                 // Set background color to fully transparent (optional)
                 // metadata.add(new EntityData<>(25, EntityDataTypes.INT, 0));
