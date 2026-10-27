@@ -22,5 +22,20 @@ interval: 0.5
 # The maximum distance at which the nametag will be visible. (In blocks) (default: 64)
 view_distance: 64
 
+# Enable players to see their own nametag (Only applies to OP or players with permission: lyttlenametag.viewself)
+view_self: true
+
+# Overrides by primary Vault group
+groups:
+  admin: |-
+    <red>[ADMIN] <PLAYER></red>
+    <gray>❤ %player_health%</gray>
+
+# Custom nametags for tamed mobs (wolves, cats, horses, etc.)
+tamed_mobs:
+  enabled: true
+  # Show nametag even if the mob does not have a custom name (will use entity type, e.g. "Wolf")
+  show_unnamed: false
+
 # ⚠️ Do not change this value.
-config_version: 3
+config_version: 4

@@ -34,3 +34,12 @@ target
 # Gradle files
 .gradle/
 build/
+
+# AI Agents & Assistants
+.agents/
+skills-lock.json
+.clauderules
+.cursorrules
+
+# Test server directory
+run/
