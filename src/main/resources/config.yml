@@ -22,5 +22,15 @@ interval: 0.5
 # The maximum distance at which the nametag will be visible. (In blocks) (default: 64)
 view_distance: 64
 
+# Render nametags through blocks.
+see_through_blocks: true
+
+# Hide the nametag while its owner is sneaking (holding Shift).
+hide_when_sneaking: true
+
+# Opacity percentages from 0 (transparent) to 100 (opaque).
+text_opacity: 100
+background_opacity: 0
+
 # ⚠️ Do not change this value.
-config_version: 3
+config_version: 4

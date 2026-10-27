@@ -137,6 +137,17 @@ public final class LyttleNametag extends JavaPlugin {
                 // Recheck if the config is fully migrated.
                 migrateConfig();
                 break;
+            case "3":
+                config.general.set("see_through_blocks", config.defaultGeneral.get("see_through_blocks"));
+                config.general.set("hide_when_sneaking", config.defaultGeneral.get("hide_when_sneaking"));
+                config.general.set("text_opacity", config.defaultGeneral.get("text_opacity"));
+                config.general.set("background_opacity", config.defaultGeneral.get("background_opacity"));
+
+                config.general.set("config_version", 4);
+
+                // Recheck if the config is fully migrated.
+                migrateConfig();
+                break;
             default:
                 break;
         }

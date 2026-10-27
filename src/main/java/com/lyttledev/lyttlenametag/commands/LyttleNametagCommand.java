@@ -42,6 +42,7 @@ public class LyttleNametagCommand {
     private static int reloadNode(CommandContext<CommandSourceStack> context) {
         final CommandSender sender = context.getSource().getSender();
         plugin.config.reload();
+        plugin.nametagHandler.reload();
         plugin.message.sendMessageRaw(sender, Component.text("The config has been reloaded"));
         return Command.SINGLE_SUCCESS;
     }
